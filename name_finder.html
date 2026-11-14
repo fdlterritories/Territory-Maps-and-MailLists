@@ -7,8 +7,11 @@
 <!--
   Script Identity
   Name:    name_finder.html
-  Version: v2.3
+  Version: v2.4
   Date:    2026-11-05
+  v2.4:    Basics gains 'Keep this tool handy' (home-screen / desktop-shortcut steps for
+           the viewer's own device and browser). Advanced rebuilt as a numbered
+           'What do you want to do?' list in task order, each topic opening on tap.
   v2.3:    USPhoneBook listed first; cards show a "Lives at ..." Find-on-page phrase
            with Copy, which lights up only current residents; Advanced explains
            Find on page for each device and how to spot current residents.
@@ -110,6 +113,13 @@ footer{color:var(--muted);font-size:.8rem;margin-top:20px}
 .copyph{padding:4px 12px;font-size:.9rem;background:var(--accent);color:var(--accent-ink)}
 .help-title{color:var(--accent);font-weight:700;padding:6px 0 0}
 .modes{display:flex;gap:8px;margin:8px 0 8px}
+.topic{border:2px solid var(--line);border-radius:10px;margin:10px 0;padding:0 14px;background:var(--card)}
+.topic>summary{cursor:pointer;font-weight:600;padding:12px 0;list-style:none}
+.topic>summary::-webkit-details-marker{display:none}
+.topic>summary::after{content:" \25B8";color:var(--accent)}
+.topic[open]>summary::after{content:" \25BE"}
+.topic[open]{border-color:var(--accent)}
+.topic ol,.topic ul{margin-top:0}
 .hidehelp{display:block;margin:14px 0 6px;padding:0}
 .mode{flex:1;padding:12px;font-size:1.05rem;background:var(--card);color:var(--ink);border:2px solid var(--line)}
 .mode.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -177,6 +187,12 @@ footer{color:var(--muted);font-size:.8rem;margin-top:20px}
         <li>Next house on the same street? Just type the new number and tap <b>Find</b> again.</li>
         <li>All done? Tap <b>Copy list</b> or <b>Download spreadsheet</b>.</li>
       </ol>
+
+      <p class="help-h">Keep this tool handy</p>
+      <p class="hint" id="homeNote"></p>
+      <ol class="cp" id="homeMine"></ol>
+      <details class="other"><summary>Other devices</summary><ul class="cp" id="homeOther"></ul></details>
+
       <p class="help-h">Please remember</p>
       <ul>
         <li>Use these names only for letter writing. Don't share the list.</li>
@@ -184,66 +200,77 @@ footer{color:var(--muted);font-size:.8rem;margin-top:20px}
       </ul>
       <p class="help-h">Need help?</p>
       <p class="contactLine"></p>
-      <p class="hint">Want to find names for "Current Resident" houses, or apartments? Tap <b>Advanced</b> above.</p>
+      <p class="hint">Want to find a real name for a blue card, or help with apartments? Tap <b>Advanced</b> above.</p>
       <button type="button" class="linkbtn hidehelp">Hide help</button>
     </div>
 
     <div class="helpsec" id="help-advanced" hidden>
-      <p class="help-h">How to copy and paste</p>
-      <p class="hint" id="deviceNote"></p>
-      <ul class="cp" id="cpMine"></ul>
-      <details class="other"><summary>Other devices</summary><ul class="cp" id="cpOther"></ul></details>
+      <p class="help-h">What do you want to do?</p>
+      <p class="hint">Tap a question to see the steps.</p>
 
-      <p class="help-h" id="findsec">Show only people living there now</p>
-      <p>On <b>USPhoneBook</b>, use <b>Find on page</b> and search for the phrase shown on the card (like <i>Lives at 160 S Macy</i>). Only current residents light up. Use the up and down arrows to jump between them.</p>
-      <ul>
-        <li><b>Windows:</b> press <b>Ctrl + F</b>, then paste or type the phrase.</li>
-        <li><b>Mac:</b> press <b>&#8984; Command + F</b>.</li>
-        <li><b>iPhone / iPad (Safari):</b> tap the Share button (square with an arrow), then <b>Find on Page</b>.</li>
-        <li><b>Android (Chrome):</b> tap <b>&#8942;</b> (three dots), then <b>Find in page</b>.</li>
-      </ul>
-      <p>On the other sites:</p>
-      <ul>
-        <li><b>TruePeopleSearch:</b> open the person. Under <b>Current Address</b> it must be your address, with dates up to now.</li>
-        <li><b>FastPeopleSearch:</b> tap <b>View Free Details</b>. The current address at the top must be your address.</li>
-      </ul>
+      <details class="topic" id="t-name"><summary>1. The card is <b>blue</b>. How do I find a real name?</summary>
+        <ol>
+          <li>On the blue card, tap <b>USPhoneBook</b>. A new page opens with the address already filled in.</li>
+          <li>That page lists people who live there now <b>and</b> people who moved away. To see only the people living there now:
+            <ul>
+              <li><b>On a computer with the "Show current only" helper:</b> click <b>Show current only</b> in the blue bar at the top of that page.</li>
+              <li><b>Anywhere else:</b> use <b>Find on page</b> (see question 6) and type the words shown on the card, like <i>Lives at 160 S Macy</i>. Only people living there now light up.</li>
+            </ul></li>
+          <li>Copy that person's name (see question 5).</li>
+          <li>Come back to this tool. Paste the name in the <b>Name found</b> box and tap <b>Use</b>.</li>
+          <li>The letter will say "<i>Name</i> or Current Resident". Made a mistake? Tap <b>Undo</b>.</li>
+        </ol>
+        <p class="hint">Nobody listed as living there now? That's fine. Leave it as <b>Current Resident</b>.</p>
+        <p class="hint"><b>Using the other two websites?</b> TruePeopleSearch: open the person and check that <b>Current Address</b> is your address. FastPeopleSearch: tap <b>View Free Details</b> and check the address at the top.</p>
+      </details>
 
-      <p class="help-h">Find a name for a "Current Resident" house</p>
-      <ol>
-        <li>On the blue card, tap one of the <b>Look up residents</b> buttons. A website opens with the address already filled in.</li>
-        <li>These sites mix in old and wrong names. Only use a person listed as living there <b>now</b>.</li>
-        <li>Copy the name, come back here, paste it in <b>Name found</b>, and tap <b>Use</b>.</li>
-        <li>The letter will say "<i>Name</i> or Current Resident". Changed your mind? Tap <b>Undo</b>.</li>
-      </ol>
+      <details class="topic" id="t-multi"><summary>2. It's an <b>apartment</b> or a building with many homes</summary>
+        <ol>
+          <li>Tick the box <b>Apartment or other multi-unit building</b>, then tap <b>Find</b>. A <b>yellow</b> card appears.</li>
+          <li><b>Easiest:</b> tap <b>Email Steve</b> and send the message. Steve will send you a full list of the homes.</li>
+          <li><b>Or do it yourself:</b> on the yellow card, tap <b>USPhoneBook</b>. For each home it shows (like <i>Apt 113</i>), type the number in <b>Unit</b>, add the name if that person lives there now, and tap <b>Add</b>. Each home goes on your list.</li>
+        </ol>
+        <p class="hint">Did a website show <b>#</b>, <b>Apt</b> or <b>Unit</b> after an address you looked up the normal way? Then it's a building with many homes. Look it up again with the box ticked.</p>
+      </details>
 
-      <p class="help-h">Apartments and other buildings with many homes</p>
-      <ol>
-        <li>Check the box <b>Apartment or other multi-unit building</b>, then tap <b>Find</b>.</li>
-        <li>For a full list of units, tap <b>Email Steve</b>.</li>
-        <li>Or do it yourself: tap a <b>Look up residents</b> button. For each unit the site shows, type the unit number (and the name, if listed as living there now) and tap <b>Add</b>.</li>
-        <li>If a website shows <b>#</b>, <b>Apt</b> or <b>Unit</b> after an address you looked up the normal way, it's a building with many homes. Look it up again with the box checked.</li>
-      </ol>
+      <details class="topic" id="t-zip"><summary>3. Check a ZIP code with the Post Office</summary>
+        <ol>
+          <li>On a blue card, tap <b>Check this ZIP with the Post Office</b>. The street is copied for you.</li>
+          <li>On the Post Office page, paste it in <b>Street Address</b> (see question 5).</li>
+          <li>Type the town, pick <b>WI</b>, and tap <b>Find</b>.</li>
+        </ol>
+      </details>
 
-      <p class="help-h">Check a ZIP code</p>
-      <p>On a blue card, tap <b>Check this ZIP with the Post Office</b>. The street is copied for you. On the Post Office page, paste it in <b>Street Address</b>, type the town, pick <b>WI</b>, and tap <b>Find</b>.</p>
+      <details class="topic" id="t-list"><summary>4. Look up a long list of addresses at once</summary>
+        <ol>
+          <li>Tap <b>Paste a whole list instead</b> (under the Find button).</li>
+          <li>Paste your addresses, one on each line.</li>
+          <li>Tap <b>Find all</b>.</li>
+        </ol>
+      </details>
 
-      <p class="help-h">Look up many addresses at once</p>
-      <p>Tap <b>Paste a whole list instead</b>, paste your addresses (one per line), and tap <b>Find all</b>.</p>
+      <details class="topic" id="t-copy"><summary>5. How do I copy and paste?</summary>
+        <p class="hint" id="deviceNote"></p>
+        <ul class="cp" id="cpMine"></ul>
+        <details class="other"><summary>Other devices</summary><ul class="cp" id="cpOther"></ul></details>
+      </details>
 
-      <p class="help-h">Put this tool on your home screen</p>
-      <ul>
-        <li><b>iPhone / iPad:</b> tap the Share button (a square with an arrow), then <b>Add to Home Screen</b>.</li>
-        <li><b>Android:</b> tap the <b>&#8942;</b> menu (three dots), then <b>Add to Home screen</b>.</li>
-        <li><b>Computer:</b> click the <b>&#9734;</b> star at the end of the web address to bookmark it.</li>
-      </ul>
+      <details class="topic" id="t-find"><summary>6. How do I find words on a page?</summary>
+        <p class="hint" id="findNote"></p>
+        <ul class="cp" id="findMine"></ul>
+        <details class="other"><summary>Other devices</summary><ul class="cp" id="findOther"></ul></details>
+        <p class="hint">Words you search for light up. Use the up and down arrows next to the search box to jump between them.</p>
+      </details>
 
-      <p class="help-h">About the names</p>
-      <ul>
-        <li>Names come from public county tax records. They show who <b>owns</b> a house, which is not always who lives there.</li>
-        <li><b>Green</b> means the owner's tax bill goes to that same house, so the owner very likely lives there. It is a strong clue, not a guarantee. It can be wrong if the house sold recently, the owner moved or passed away, or a landlord gets mail there. If it matters, write "<i>Name</i> or Current Resident".</li>
-        <li>Names from people-search websites can be years old. They are marked "unconfirmed".</li>
-        <li>Use names and addresses only for letter writing. Don't post or share the lists.</li>
-      </ul>
+      <details class="topic" id="t-trust"><summary>7. Can I trust the names?</summary>
+        <ul>
+          <li>Names come from county tax records. They show who <b>owns</b> a house, which is not always who lives there.</li>
+          <li><b>Green</b> means the owner's tax bill goes to that same house, so the owner very likely lives there. It can be wrong if the house sold recently, the owner moved or passed away, or a landlord gets mail there. If it matters, write "<i>Name</i> or Current Resident".</li>
+          <li>Names from people-search websites can be years old. They are marked "unconfirmed".</li>
+          <li>Use names and addresses only for letter writing. Don't post or share the lists.</li>
+        </ul>
+      </details>
+
       <p class="help-h">Need help?</p>
       <p class="contactLine"></p>
       <button type="button" class="linkbtn hidehelp">Hide help</button>
@@ -304,7 +331,7 @@ footer{color:var(--muted);font-size:.8rem;margin-top:20px}
   <footer>
     Names come from county tax records, which show who owns a property. Sources: Fond du Lac County GIS,
     Dodge County Open Data, and the State of Wisconsin parcel map (house ZIP codes in Fond du Lac County).
-    Version 2.3, Nov 2026.
+    Version 2.4, Nov 2026.
   </footer>
 </main>
 
@@ -896,6 +923,24 @@ const COPY_PASTE = {
   mac:     ["Mac", "Drag across the words to select them and press <b>&#8984; Command + C</b>. Click the box here and press <b>&#8984; Command + V</b>."],
   windows: ["Windows", "Drag across the words to select them and press <b>Ctrl + C</b>. Click the box here and press <b>Ctrl + V</b>."]
 };
+const FIND_PAGE = {
+  iphone:  ["iPhone / iPad", "In Safari, tap the Share button (a square with an arrow pointing up). Scroll down and tap <b>Find on Page</b>. Type the words."],
+  android: ["Android", "In Chrome, tap <b>&#8942;</b> (three dots, top right), then <b>Find in page</b>. Type the words."],
+  mac:     ["Mac", "Press <b>&#8984; Command + F</b>. A small box appears. Type or paste the words."],
+  windows: ["Windows", "Press <b>Ctrl + F</b>. A small box appears at the top. Type or paste the words."]
+};
+const HOME_SCREEN = {
+  iphone:  ["iPhone / iPad", ["Open this page in <b>Safari</b>.", "Tap the Share button (a square with an arrow pointing up).", "Tap <b>Add to Home Screen</b>, then <b>Add</b>.", "An icon appears on your home screen. Tap it any time."]],
+  android: ["Android", ["Open this page in <b>Chrome</b>.", "Tap <b>&#8942;</b> (three dots, top right).", "Tap <b>Add to Home screen</b>, then <b>Add</b>.", "An icon appears on your home screen. Tap it any time."]],
+  chrome:  ["Windows computer, Chrome", ["Click <b>&#8942;</b> (three dots, top right).", "Click <b>Cast, save, and share</b>, then <b>Create shortcut</b>.", "Tick <b>Open as window</b> and click <b>Create</b>.", "An icon appears on your desktop. Double-click it any time."]],
+  edge:    ["Windows computer, Edge", ["Click <b>&middot;&middot;&middot;</b> (three dots, top right).", "Click <b>Apps</b>, then <b>Install this site as an app</b>, then <b>Install</b>.", "In the box that appears, tick <b>Create Desktop shortcut</b> and click <b>Allow</b>.", "An icon appears on your desktop. Double-click it any time."]],
+  mac:     ["Mac", ["In <b>Safari</b>: click the <b>File</b> menu, then <b>Add to Dock</b>.", "In <b>Chrome</b>: click <b>&#8942;</b>, then <b>Cast, save, and share</b>, then <b>Create shortcut</b>.", "Click the new icon any time."]]
+};
+function myBrowserKey(){
+  const d = myDevice(), ua = navigator.userAgent || "";
+  if (d === "windows") return /Edg\//.test(ua) ? "edge" : "chrome";
+  return d;
+}
 function myDevice(){
   const ua = navigator.userAgent || "";
   if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "iphone";
@@ -909,6 +954,15 @@ function myDevice(){
   $("deviceNote").textContent = `Looks like you're using ${COPY_PASTE[mine][0]}:`;
   $("cpMine").innerHTML = li(mine);
   $("cpOther").innerHTML = Object.keys(COPY_PASTE).filter(k => k !== mine).map(li).join("");
+  const fli = k => `<li><b>${FIND_PAGE[k][0]}:</b> ${FIND_PAGE[k][1]}</li>`;
+  $("findNote").textContent = `Looks like you're using ${FIND_PAGE[mine][0]}:`;
+  $("findMine").innerHTML = fli(mine);
+  $("findOther").innerHTML = Object.keys(FIND_PAGE).filter(k => k !== mine).map(fli).join("");
+  const hk = myBrowserKey();
+  $("homeNote").textContent = `Put an icon for this tool on your ${hk === "iphone" || hk === "android" ? "home screen" : "computer"}. Looks like you're using ${HOME_SCREEN[hk][0]}:`;
+  $("homeMine").innerHTML = HOME_SCREEN[hk][1].map(x => `<li>${x}</li>`).join("");
+  $("homeOther").innerHTML = Object.keys(HOME_SCREEN).filter(k => k !== hk)
+    .map(k => `<li><b>${HOME_SCREEN[k][0]}:</b> ${HOME_SCREEN[k][1].slice(0, -1).join(" ")}</li>`).join("");
   // The Basics / Advanced buttons are always visible. Tapping one opens that help;
   // tapping the lit one again (or "Hide help") closes it.
   let current = "";
@@ -922,7 +976,11 @@ function myDevice(){
   };
   document.querySelectorAll(".mode").forEach(b => b.addEventListener("click", () => showMode(current === b.dataset.mode ? "" : b.dataset.mode)));
   document.querySelectorAll(".hidehelp").forEach(b => b.addEventListener("click", () => { showMode(""); $("help").scrollIntoView({behavior:"smooth"}); }));
-  window.openHowToPaste = (id) => { showMode("advanced"); (id && $(id) ? $(id) : $("help")).scrollIntoView({behavior:"smooth"}); };
+  window.openHowToPaste = (id) => {
+    showMode("advanced");
+    const t = $(id || "t-copy");
+    if (t){ t.open = true; t.scrollIntoView({behavior:"smooth"}); } else $("help").scrollIntoView({behavior:"smooth"});
+  };
   // First visit: open on Basics. After that help starts closed (remembered on this device only).
   try{
     if (!localStorage.getItem("nf_seen_help")){ showMode("basics"); localStorage.setItem("nf_seen_help", "1"); }
@@ -938,8 +996,8 @@ $("clearBoxes").addEventListener("click", () => {
   $("fMulti").checked = false; $("formMsg").textContent = ""; $("fNum").focus();
 });
 $("results").addEventListener("click", ev => {
-  if (ev.target.closest("[data-howpaste]")){ window.openHowToPaste(); return; }
-  if (ev.target.closest("[data-howfind]")){ window.openHowToPaste("findsec"); return; }
+  if (ev.target.closest("[data-howpaste]")){ window.openHowToPaste("t-copy"); return; }
+  if (ev.target.closest("[data-howfind]")){ window.openHowToPaste("t-find"); return; }
   const cph = ev.target.closest("[data-phrase]");
   if (cph){
     const done = () => { cph.textContent = "Copied"; setTimeout(() => cph.textContent = "Copy", 2000); };
