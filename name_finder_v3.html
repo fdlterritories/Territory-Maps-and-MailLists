@@ -7,8 +7,10 @@
 <!--
   Script Identity
   Name:    name_finder.html
-  Version: v3.1
-  Date:    2026-11-21
+  Version: v3.2
+  Date:    2026-11-22
+  v3.2:    Backup addresses for the territory outlines and contact.json point to the
+           fdlterritories site (site moved 2026-11-21). Becomes the main name_finder.html.
   v3.1:    Contact details come from contact.json on the GitHub site (name, email, phone).
            Change that one file and every copy of the tool shows the new details; the link
            stays the same. Built-in fallback if the file can't be read. Phone is shown only
@@ -364,7 +366,7 @@ body.new2 .mode.need2, body.new3 .mode.need3{outline:3px solid var(--accent)}
   <footer>
     Names come from county tax records, which show who owns a property. Sources: Fond du Lac County GIS,
     Dodge County Open Data, and the State of Wisconsin parcel map (house ZIP codes in Fond du Lac County).
-    Version 3.1, Nov 2026.
+    Version 3.2, Nov 2026.
   </footer>
 </main>
 
@@ -379,7 +381,7 @@ const SOURCES = {
   // Territory outlines published by Territory Master (publish_boundaries.py).
   // First try the copy next to this page, then the raw GitHub copy (for testing from a saved file).
   territories: ["territory_lookup_ONLY.geojson",
-    "https://raw.githubusercontent.com/spleaders/Territory-Maps-and-MailLists/main/territory_lookup_ONLY.geojson"]
+    "https://raw.githubusercontent.com/fdlterritories/Territory-Maps-and-MailLists/main/territory_lookup_ONLY.geojson"]
 };
 const STATE_ABBR = "WI";
 /* Order territories are listed in: specialty types first */
@@ -413,7 +415,7 @@ const TYPE_ORDER = ["Apartment","Business","Letter","Taycheedah Prison","R","Tow
    These are only used if contact.json can't be read. Leave phone "" to show no phone. */
 const CONTACT = { name: "FDL Territories", email: "fdlterritories@gmail.com", phone: "" };
 const CONTACT_FILES = ["contact.json",
-  "https://raw.githubusercontent.com/spleaders/Territory-Maps-and-MailLists/main/contact.json"];
+  "https://raw.githubusercontent.com/fdlterritories/Territory-Maps-and-MailLists/main/contact.json"];
 
 /* ---------- Word lists used to read addresses and owner names ---------- */
 const DIRS = {N:"N",NORTH:"N",S:"S",SOUTH:"S",E:"E",EAST:"E",W:"W",WEST:"W"};
