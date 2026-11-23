@@ -7,8 +7,14 @@
 <!--
   Script Identity
   Name:    name_finder.html
-  Version: v3.2
-  Date:    2026-11-22
+  Version: v3.3
+  Date:    2026-11-23
+  v3.3:    Homes with no tax record of their own (mobile home park lots, e.g. N7678 Columbia Dr
+           in Ashwood Grove) are no longer "Not found". When no property matches, the county
+           address lists are checked (Fond du Lac Addresses service, Dodge Address Points). If
+           the address is there, a yellow "Home on a shared property" card shows it with
+           "Current Resident", the owner of the land it sits on (e.g. the park), house ZIP,
+           territory and the Look up residents buttons (level 2, as on blue cards).
   v3.2:    Backup addresses for the territory outlines and contact.json point to the
            fdlterritories site (site moved 2026-11-21). Becomes the main name_finder.html.
   v3.1:    Contact details come from contact.json on the GitHub site (name, email, phone).
@@ -208,7 +214,7 @@ body.new2 .mode.need2, body.new3 .mode.need3{outline:3px solid var(--accent)}
           <ul class="colors">
             <li><span class="dot" style="background:var(--ok)"></span><b>Green</b>: write the name shown.</li>
             <li><span class="dot" style="background:var(--cr)"></span><b>Blue</b>: write <b>Current Resident</b>.</li>
-            <li><span class="dot" style="background:var(--warn-mark)"></span><b>Yellow</b>: read the note on the card first.</li>
+            <li><span class="dot" style="background:var(--warn-mark)"></span><b>Yellow</b>: read the note on the card first. Homes in a mobile home park show up yellow.</li>
             <li><span class="dot" style="background:var(--bad)"></span><b>Red</b>: not found. Check the spelling.</li>
           </ul></li>
         <li>Next house on the same street? Just type the new number and tap <b>Find</b> again.</li>
@@ -359,14 +365,15 @@ body.new2 .mode.need2, body.new3 .mode.need3{outline:3px solid var(--accent)}
   <div class="key">
     <p><span class="dot" style="background:var(--ok)"></span><b>Green</b> - the owner lives there. Use the name shown.</p>
     <p><span class="dot" style="background:var(--cr)"></span><b>Blue</b> - someone else owns it, so write "Current Resident".</p>
-    <p><span class="dot" style="background:var(--warn-mark)"></span><b>Yellow</b> - read the note before using it (multi-unit buildings show who to contact).</p>
+    <p><span class="dot" style="background:var(--warn-mark)"></span><b>Yellow</b> - read the note before using it (multi-unit buildings show who to contact; homes in a mobile home park get "Current Resident").</p>
     <p><span class="dot" style="background:var(--bad)"></span><b>Red</b> - not found. Check the spelling and try again.</p>
   </div>
 
   <footer>
     Names come from county tax records, which show who owns a property. Sources: Fond du Lac County GIS,
     Dodge County Open Data, and the State of Wisconsin parcel map (house ZIP codes in Fond du Lac County).
-    Version 3.2, Nov 2026.
+    Homes with no tax record of their own are checked against the county address lists.
+    Version 3.3, Nov 2026.
   </footer>
 </main>
 
@@ -378,6 +385,10 @@ const SOURCES = {
   dodge: "https://services5.arcgis.com/WoH0haFujOX8jVNs/arcgis/rest/services/Dodge_Open_Data/FeatureServer/12",
   state: "https://dnrmaps.wi.gov/arcgis/rest/services/DW_Map_Dynamic/EN_County_Tax_Parcels_WTM_Ext_Dynamic_L16/MapServer/0",
   usps:  "https://tools.usps.com/zip-code-lookup.htm?byaddress",
+  // County address lists - used only when no tax property matches (homes on a shared property,
+  // such as mobile home park lots, have an address here but no tax record of their own).
+  fdlAddr:   "https://gisweb.fdlco.wi.gov/server/rest/services/Addresses/MapServer/0",
+  dodgeAddr: "https://services5.arcgis.com/WoH0haFujOX8jVNs/arcgis/rest/services/Dodge_Open_Data/FeatureServer/0",
   // Territory outlines published by Territory Master (publish_boundaries.py).
   // First try the copy next to this page, then the raw GitHub copy (for testing from a saved file).
   territories: ["territory_lookup_ONLY.geojson",
@@ -570,6 +581,89 @@ async function fdlHouseZip(c){
   return zips.length === 1 ? zips[0] : "";
 }
 
+/* ---------- Homes with no tax record of their own (v3.3) ----------
+   Used only when no tax property matches. Looks the address up in the county address lists;
+   if it is there, finds the property (usually a mobile home park) the home sits on. */
+async function findAddressPoints(a){
+  const out = [];
+  const tasks = [
+    query(SOURCES.fdlAddr, {where:`SITE LIKE '${sq(a.houseNo)} %' AND SITE LIKE '%${sq(a.core)}%'`,
+      outFields:"SITE,NUM_UNIT", returnGeometry:"true", outSR:"4326"}).then(rows => rows.forEach(r => {
+        const site = up(String(r.SITE || "").replace(/#.*$/, ""));
+        out.push({county:"Fond du Lac", site, x:r.__geom && r.__geom.x, y:r.__geom && r.__geom.y, zip:"", city:""});
+      })),
+    query(SOURCES.dodgeAddr, {where:`COMPADDR LIKE '${sq(a.houseNo)} %' AND COMPADDR LIKE '%${sq(a.core)}%'`,
+      outFields:"COMPADDR,ZIPCODE,POSTOFFICE,MUNINAME", returnGeometry:"true", outSR:"4326"}).then(rows => rows.forEach(r => {
+        const site = up(String(r.COMPADDR || "").replace(/#.*$/, ""));
+        out.push({county:"Dodge", site, x:r.__geom && r.__geom.x, y:r.__geom && r.__geom.y,
+          zip:String(r.ZIPCODE || "").slice(0,5), city:r.POSTOFFICE || "", town:r.MUNINAME || ""});
+      }))
+  ];
+  const res = await Promise.allSettled(tasks);
+  const failed = res.filter(x => x.status === "rejected").length;
+  // Keep only exact street matches (same number, street name and direction)
+  const keep = out.filter(p => {
+    const q = parseAddress(p.site);
+    return q.ok && q.houseNo === a.houseNo && q.core === a.core && (!a.dir || !q.dir || q.dir === a.dir)
+      && p.x != null && p.y != null;
+  });
+  // One entry per address (a park lot can have several points)
+  const seen = new Set();
+  return {failed, points: keep.filter(p => { const k = p.county + "|" + p.site; if (seen.has(k)) return false; seen.add(k); return true; })};
+}
+
+/* The tax property a point sits on: owner and the property's own address */
+async function propertyAt(county, x, y){
+  const geo = {geometry:`${x},${y}`, geometryType:"esriGeometryPoint", inSR:"4326", spatialRel:"esriSpatialRelIntersects"};
+  if (county === "Fond du Lac"){
+    const rows = await query(SOURCES.fdl, Object.assign({outFields:"OwnerNames,Street_address,Municipality"}, geo));
+    if (!rows.length) return null;
+    return {owner:rows[0].OwnerNames || "", site:rows[0].Street_address || "", town:(rows[0].Municipality||"").replace(/^(CITY|VILLAGE|TOWN) OF /,"")};
+  }
+  const rows = await query(SOURCES.dodge, Object.assign({outFields:"MAILING_NAME1,ADCOMP_1,CITY_1"}, geo));
+  if (!rows.length) return null;
+  return {owner:rows[0].MAILING_NAME1 || "", site:rows[0].ADCOMP_1 || "", town:rows[0].CITY_1 || ""};
+}
+
+/* House ZIP for a point in Fond du Lac County, from the State parcel layer */
+async function fdlZipAt(x, y){
+  const rows = await query(SOURCES.state, {where:"CONAME='FOND DU LAC'", outFields:"ZIPCODE",
+    geometry:`${x},${y}`, geometryType:"esriGeometryPoint", inSR:"4326", spatialRel:"esriSpatialRelIntersects"});
+  const zips = [...new Set(rows.filter(r => r.ZIPCODE).map(r => String(r.ZIPCODE).slice(0,5)))];
+  return zips.length === 1 ? zips[0] : "";
+}
+
+const orgCase = s => titleCase(s).replace(/\b(Llc|Inc|Lp|Llp)\b/g, m => m.toUpperCase());
+
+async function sharedPropertyResult(line, a, ctx){
+  let found;
+  try{ found = await findAddressPoints(a); }catch(e){ return null; }
+  const pts = found.points;
+  if (!pts.length) return found.failed ? {failed:true} : null;
+  if (new Set(pts.map(p => p.county + "|" + p.site)).size > 1){
+    const list = pts.slice(0,4).map(p => `${titleCase(p.site)} (${p.county} County)`).join("; ");
+    return {line, kind:"warn", tag:"More than one match", why:"Add the town or ZIP. Matches: " + list};
+  }
+  const p = pts[0];
+  ctx.c = {geom:{x:p.x, y:p.y}};          // for the territory check
+  let prop = null;
+  try{ prop = await propertyAt(p.county, p.x, p.y); }catch(e){ prop = null; }
+  let zip = p.zip, city = p.city;
+  if (p.county === "Fond du Lac"){
+    try{ zip = await fdlZipAt(p.x, p.y); }catch(e){ zip = ""; }
+  }
+  if (zip && !city) city = await cityForZip(zip);
+  const town = titleCase(p.town || (prop && prop.town) || "");
+  const street = titleCase(p.site) + (a.unit ? " " + titleCase(a.unit) : "");
+  const onLand = prop && String(prop.owner || "").trim()
+    ? ` It sits on property owned by ${orgCase(prop.owner)}${prop.site ? " (" + titleCase(prop.site) + ")" : ""} - usually a mobile home park.`
+    : " It sits on a larger property, usually a mobile home park.";
+  let why = "This address is real (it is on the county address list), but the home has no tax record of its own, so the owner's name can't be shown." + onLand + ' Write "Current Resident".';
+  if (!zip || !city) why += " The house ZIP code was not found. Use the Post Office link to get it.";
+  return {line, kind:"warn", tag:"Home on a shared property", name:"Current Resident", town,
+    street, city: (zip && city) ? titleCase(city) : "", zip: (zip && city) ? zip : "", county:p.county, why, check:true};
+}
+
 /* Post office city for a ZIP: the city most owners in that ZIP get their mail in */
 const zipCityCache = {};
 async function cityForZip(zip){
@@ -662,7 +756,7 @@ function pointInParcel(geom){
 }
 /* Returns a sorted list of territory names, [] if none, or null if it could not check */
 async function territoriesFor(geom){
-  const pt = pointInParcel(geom);
+  const pt = (geom && geom.x != null && geom.y != null) ? [geom.x, geom.y] : pointInParcel(geom);
   if (!pt) return null;
   const list = await loadTerritories();
   const [x, y] = pt;
@@ -693,11 +787,15 @@ async function lookUpCore(line, multi, ctx){
   let cands = [];
   if (f.status === "fulfilled") cands = cands.concat(f.value);
   if (d.status === "fulfilled") cands = cands.concat(d.value);
-  const failed = [f, d].filter(x => x.status === "rejected").length;
+  let failed = [f, d].filter(x => x.status === "rejected").length;
 
   if (!cands.length){
+    // v3.3: no tax property - check the county address lists (mobile home park lots etc.)
+    const shared = await sharedPropertyResult(line, a, ctx);
+    if (shared && !shared.failed) return shared;
+    if (shared && shared.failed) failed += 1;
     return {line, kind:"bad", tag:"Not found",
-      why: failed ? "A county website did not answer. Wait a minute and try again." : "No property with this address in Fond du Lac or Dodge County. Check the spelling."};
+      why: failed ? "A county website did not answer. Wait a minute and try again." : "This address is not in the Fond du Lac or Dodge County property records or address lists. Check the spelling."};
   }
 
   cands.forEach(c => c.score = score(c, a));
