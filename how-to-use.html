@@ -226,8 +226,26 @@
   </div>
 
   <div class="card" style="text-align:center;">
-    <p>That's everything you need to get started. If anything is confusing, just ask whoever sent you this link &mdash; they'll be glad to help.</p>
+    <p>That's everything you need to get started.</p>
+    <p id="contact-line">If anything is confusing, just ask whoever sent you this link &mdash; they'll be glad to help.</p>
   </div>
+  <script>
+  /* 2026-11-23: contact details come from contact.json (same file the Name
+     Finder uses) -- change that one file to update both pages. If it can't
+     be read, the line above stays as it is. */
+  (function(){
+    try{
+      fetch('contact.json',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;}).then(function(c){
+        if(!c||!(c.email||c.phone))return;
+        var esc=function(t){return String(t).replace(/[&<>"]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x];});};
+        var bits=[];
+        if(c.email)bits.push('<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>');
+        if(c.phone)bits.push('call or text <a href="tel:'+esc(String(c.phone).replace(/[^0-9+]/g,''))+'">'+esc(c.phone)+'</a>');
+        document.getElementById('contact-line').innerHTML='Questions? Contact <b>'+esc(c.name||'us')+'</b>: '+bits.join(' &middot; ');
+      }).catch(function(){});
+    }catch(e){}
+  })();
+  </script>
 
   <div class="footer">Territory Master &mdash; Map &amp; Mailing List Guide</div>
 
