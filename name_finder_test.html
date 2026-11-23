@@ -7,8 +7,11 @@
 <!--
   Script Identity
   Name:    name_finder.html
-  Version: v3.3
+  Version: v3.4
   Date:    2026-11-23
+  v3.4:    The "Wish this tool could..." box is quieter so new users don't take it for a
+           step: moved below the color key, starts with "Optional:", small gray text, no
+           dashed border, small outline "Show me" button (Steve).
   v3.3:    Homes with no tax record of their own (mobile home park lots, e.g. N7678 Columbia Dr
            in Ashwood Grove) are no longer "Not found". When no property matches, the county
            address lists are checked (Fond du Lac Addresses service, Dodge Address Points). If
@@ -182,9 +185,9 @@ body.lvl2 .only1, body.lvl3 .only1, body.lvl3 .only12{display:none !important}
 body.new2 .need2:not(.mode), body.new3 .need3{box-shadow:-4px 0 0 0 var(--accent);border-radius:4px}
 body.new2 .mode.need2, body.new3 .mode.need3{outline:3px solid var(--accent)}
 .lvlinfo{color:var(--muted);font-size:.85rem;float:right;margin-top:8px}
-.levelup{background:var(--card);border:2px dashed var(--accent);border-radius:10px;padding:14px 16px;margin-top:22px}
-.levelup p{margin:0 0 10px;font-weight:700}
-.levelup .big{width:auto;padding:10px 22px;font-size:1.05rem}
+.levelup{margin-top:14px;padding:4px 2px;color:var(--muted);font-size:.85rem}
+.levelup p{margin:0 0 6px;font-weight:400}
+.levelup .smallbtn{width:auto;padding:4px 14px;font-size:.85rem;font-weight:600;background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:8px}
 .newmsg{background:var(--cr-bg);border-radius:10px;padding:10px 14px;margin:0 0 14px}
 .newmsg ul{margin:6px 0 0;padding-left:22px}
 .leveldown{margin-top:10px;font-size:.9rem}
@@ -355,12 +358,6 @@ body.new2 .mode.need2, body.new3 .mode.need3{outline:3px solid var(--accent)}
     <button id="clear">Clear list</button>
   </div>
 
-  <div class="levelup" id="levelUp">
-    <p id="levelUpText"></p>
-    <button type="button" id="levelUpBtn" class="big">Show me</button>
-    <div class="leveldown need2"><button type="button" class="linkbtn" id="levelDownBtn">Go back to a simpler level</button></div>
-  </div>
-  <div class="leveldown need3"><button type="button" class="linkbtn" id="levelDownBtn3">Go back to a simpler level</button></div>
 
   <div class="key">
     <p><span class="dot" style="background:var(--ok)"></span><b>Green</b> - the owner lives there. Use the name shown.</p>
@@ -369,11 +366,18 @@ body.new2 .mode.need2, body.new3 .mode.need3{outline:3px solid var(--accent)}
     <p><span class="dot" style="background:var(--bad)"></span><b>Red</b> - not found. Check the spelling and try again.</p>
   </div>
 
+  <div class="levelup" id="levelUp">
+    <p id="levelUpText"></p>
+    <button type="button" id="levelUpBtn" class="smallbtn">Show me</button>
+    <div class="leveldown need2"><button type="button" class="linkbtn" id="levelDownBtn">Go back to a simpler level</button></div>
+  </div>
+  <div class="leveldown need3"><button type="button" class="linkbtn" id="levelDownBtn3">Go back to a simpler level</button></div>
+
   <footer>
     Names come from county tax records, which show who owns a property. Sources: Fond du Lac County GIS,
     Dodge County Open Data, and the State of Wisconsin parcel map (house ZIP codes in Fond du Lac County).
     Homes with no tax record of their own are checked against the county address lists.
-    Version 3.3, Nov 2026.
+    Version 3.4, Nov 2026.
   </footer>
 </main>
 
@@ -891,7 +895,7 @@ function setLevel(n, announce){
   $("lvlInfo").textContent = `Level ${level} of ${MAX_LEVEL}: ${LEVELS[level].name}`;
   const next = LEVELS[level + 1];
   $("levelUp").hidden = !next;
-  if (next) $("levelUpText").textContent = next.teaser;
+  if (next) $("levelUpText").textContent = "Optional: " + next.teaser.charAt(0).toLowerCase() + next.teaser.slice(1);
   const msg = $("newMsg");
   if (announce === "up"){
     document.body.classList.add("new" + level);
