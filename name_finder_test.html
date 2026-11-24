@@ -959,8 +959,15 @@ function unitRequestHtml(r){
       </div>
       <div class="unitmsg" id="umsg${r.n}"></div>
       <div class="pasteall">
-        <div class="people-h">Faster: paste the whole USPhoneBook page</div>
-        <div class="hint">On the USPhoneBook page, select everything and copy it (computer: Ctrl+A, then Ctrl+C; phone: Select all, Copy). Then paste it here.</div>
+        <div class="people-h">Faster: fill every unit at once</div>
+        <ol class="hint" style="margin:4px 0 6px;padding-left:20px">
+          <li>Click <b>USPhoneBook</b> above and wait for the page to finish loading.</li>
+          <li>Copy the whole page. <b>Computer:</b> press <b>Ctrl+A</b>, then <b>Ctrl+C</b>. <b>Phone:</b> press and hold on the page, tap <b>Select all</b>, then <b>Copy</b>.</li>
+          <li>Come back here, click in the box below and paste (<b>Ctrl+V</b>, or press and hold, then <b>Paste</b>).</li>
+          <li>If USPhoneBook shows more pages (1 2 3 &hellip; near the list), open each one, copy it the same way and paste it under the first.</li>
+          <li>Click <b>Find the units</b>. Check each name and change any with its drop-down.</li>
+          <li>Click <b>Add all to my list</b>.</li>
+        </ol>
         <textarea id="pa${r.n}" placeholder="Paste here"></textarea>
         <button type="button" class="usebtn" data-pasteall="${r.n}">Find the units</button>
         <div id="pal${r.n}"></div>
