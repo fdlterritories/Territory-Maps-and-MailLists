@@ -7,8 +7,15 @@
 <!--
   Script Identity
   Name:    name_finder.html
-  Version: v3.4
+  Version: v3.5
   Date:    2026-11-23
+  v3.5:    Multi-unit buildings (level 3): "Paste the whole USPhoneBook page" -- select all,
+           copy, paste; the Finder keeps only the people living at this building now and
+           lists every apartment with a name chosen (one person; two sharing a last name
+           -> "A & B"; otherwise Current Resident), each with a drop-down; "Add all to my
+           list". Also accepts the Show Current Residents add-on's "Copy current
+           residents" text. Housing Authority homes: blue card says residents often stay
+           a long time, worth looking up a name (Steve).
   v3.4:    The "Wish this tool could..." box is quieter so new users don't take it for a
            step: moved below the color key, starts with "Optional:", small gray text, no
            dashed border, small outline "Show me" button (Steve).
@@ -154,6 +161,11 @@ footer{color:var(--muted);font-size:.8rem;margin-top:20px}
 .unitrow input{min-width:0;font:inherit;padding:8px 10px;border:2px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
 .unitrow .unitbox{flex:0 0 32%}
 .unitrow input:not(.unitbox){flex:1}
+.pasteall{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
+.pasteall textarea{min-height:70px;margin:6px 0 8px}
+.parow{display:flex;gap:8px;align-items:center;margin:4px 0}
+.parow .pau{flex:0 0 22%;font-weight:700}
+.parow select{flex:1;min-width:0;font:inherit;padding:6px;border:2px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
 .unitmsg{font-size:.9rem;color:var(--muted);margin-top:6px;min-height:1.2em}
 .findrow{display:flex;gap:10px}
 .findrow .big{flex:1}
@@ -377,7 +389,7 @@ body.new2 .mode.need2, body.new3 .mode.need3{outline:3px solid var(--accent)}
     Names come from county tax records, which show who owns a property. Sources: Fond du Lac County GIS,
     Dodge County Open Data, and the State of Wisconsin parcel map (house ZIP codes in Fond du Lac County).
     Homes with no tax record of their own are checked against the county address lists.
-    Version 3.4, Nov 2026.
+    Version 3.5, Nov 2026.
   </footer>
 </main>
 
@@ -849,6 +861,8 @@ async function lookUpCore(line, multi, ctx){
   const org = c.county === "Dodge" ? (c.ownerIsOrg || isOrg(c.owner)) : isOrg(c.owner);
 
   if (/\bESTATE\b|\bEST OF\b/.test(up(c.owner))) return residentAddress("Owner is listed as an estate.");
+  if (/\bHOUSING AUTHORITY\b/.test(up(c.owner)) && !mailMatches)
+    return residentAddress("Owned by the Housing Authority. Residents there often stay a long time, so it's worth looking up a name.");
   if (org) return residentAddress(mailMatches ? "Owner is a company, trust or group, not a person." : "Owner is a company, trust or group (likely a rental).");
 
   const person = titleCase(c.county === "Dodge" ? (c.personName || c.owner) : (fdlPersonName(c.owner) || c.owner));
@@ -944,7 +958,108 @@ function unitRequestHtml(r){
         <button type="button" class="usebtn" data-addunit="${r.n}">Add</button>
       </div>
       <div class="unitmsg" id="umsg${r.n}"></div>
+      <div class="pasteall">
+        <div class="people-h">Faster: fill every unit at once</div>
+        <ol class="hint" style="margin:4px 0 6px;padding-left:20px">
+          <li>Click <b>USPhoneBook</b> above and wait for the page to finish loading.</li>
+          <li>Copy the whole page. <b>Computer:</b> press <b>Ctrl+A</b>, then <b>Ctrl+C</b>. <b>Phone:</b> press and hold on the page, tap <b>Select all</b>, then <b>Copy</b>.</li>
+          <li>Come back here, click in the box below and paste (<b>Ctrl+V</b>, or press and hold, then <b>Paste</b>).</li>
+          <li>If USPhoneBook shows more pages (1 2 3 &hellip; near the list), open each one, copy it the same way and paste it under the first.</li>
+          <li>Click <b>Find the units</b>. Check each name and change any with its drop-down.</li>
+          <li>Click <b>Add all to my list</b>.</li>
+        </ol>
+        <textarea id="pa${r.n}" placeholder="Paste here"></textarea>
+        <button type="button" class="usebtn" data-pasteall="${r.n}">Find the units</button>
+        <div id="pal${r.n}"></div>
+      </div>
     </div>`;
+}
+
+/* ---------- v3.5: paste a whole USPhoneBook page -> every unit at once ---------- */
+const PA_CR = "Current Resident", PA_SKIP = "(skip this unit)";
+const pasteData = {};
+const normTxt = s => String(s || "").toLowerCase().replace(/[.,#]/g, " ").replace(/\s+/g, " ").trim();
+function lastName(n){
+  const w = up(n).split(" ").filter(x => !["JR","SR","II","III","IV","V"].includes(x));
+  return w.length ? w[w.length - 1] : "";
+}
+function pickName(names){
+  if (!names.length) return PA_CR;
+  if (names.length === 1) return names[0];
+  const g = {};
+  names.forEach(n => (g[lastName(n)] = g[lastName(n)] || []).push(n));
+  const best = Object.values(g).sort((a, b) => b.length - a.length)[0];
+  return best.length >= 2 ? `${best[0]} & ${best[1]}` : PA_CR;
+}
+/* -> {apt: [names]} for people living at this building now */
+function parsePeoplePage(text, street){
+  const lines = String(text || "").replace(/\r/g, "").split("\n").map(l => l.trim());
+  const out = {};
+  const add = (apt, name) => {
+    apt = String(apt || "").trim().replace(/^#\s*/, "");
+    name = String(name || "").replace(/\s*,?\s*age\s*\d+.*$/i, "").replace(/\s+/g, " ").trim();
+    if (!apt || !/^[A-Za-z][A-Za-z.' -]+$/.test(name) || name.split(" ").length < 2 || name.split(" ").length > 6) return;
+    const k = apt.toUpperCase();
+    out[k] = out[k] || [];
+    if (!out[k].some(x => x.toUpperCase() === name.toUpperCase())) out[k].push(name);
+  };
+  if (/^USPHONEBOOK\t/.test(lines[0] || "")){            // add-on "Copy current residents"
+    lines.slice(1).forEach(l => { const p = l.split("\t"); add(p[0], p[1]); });
+    return out;
+  }
+  const target = normTxt(findPhrase(street));             // "lives at 160 s macy"
+  lines.forEach((l, i) => {
+    if (!/^lives at\s/i.test(l)) return;
+    const nl = normTxt(l);
+    if (!(nl === target || nl.indexOf(target + " ") === 0)) return;   // moved away / other building
+    const m = l.match(/,\s*(?:apt|unit|ste|suite|#)\s*#?\s*([^,]+?)\s*,/i);
+    if (!m) return;
+    for (let j = i - 1; j >= 0 && j >= i - 4; j--){
+      const t = lines[j];
+      if (!t || /^(view|prior|relatives|lives at|public records|paid)/i.test(t)) continue;
+      add(m[1], t); break;
+    }
+  });
+  return out;
+}
+function pasteAll(n){
+  const b = results.find(x => x.n === n);
+  if (!b) return;
+  const data = parsePeoplePage($("pa" + n).value, b.bStreet);
+  const apts = Object.keys(data).sort((a, b2) => a.localeCompare(b2, undefined, {numeric:true}));
+  pasteData[n] = data;
+  if (!apts.length){
+    $("pal" + n).innerHTML = `<div class="unitmsg">No current residents with an apartment were found in what you pasted. Make sure you copied the whole page for this building.</div>`;
+    return;
+  }
+  $("pal" + n).innerHTML = `<div class="hint">${apts.length} apartment${apts.length === 1 ? "" : "s"} found. Check each name, then add them all.</div>` +
+    apts.map((a, i) => {
+      const names = data[a], d = pickName(names);
+      const opts = [d].concat(names.filter(x => x !== d), [PA_CR, PA_SKIP].filter(x => x !== d));
+      return `<div class="parow"><span class="pau">${esc(unitLabel(a))}</span>
+        <select id="pas${n}_${i}" data-apt="${esc(a)}">${opts.map(o => `<option>${esc(o)}</option>`).join("")}</select></div>`;
+    }).join("") +
+    `<button type="button" class="usebtn" data-addall="${n}">Add all to my list</button>`;
+}
+function addAllUnits(n){
+  const b = results.find(x => x.n === n);
+  if (!b) return;
+  let added = 0;
+  document.querySelectorAll(`[id^="pas${n}_"]`).forEach(sel => {
+    const v = sel.value, unit = unitLabel(sel.dataset.apt);
+    if (v === PA_SKIP || !unit) return;
+    const street = `${b.bStreet} ${unit}`;
+    if (results.some(x => x.fromUnit && x.street === street)) return;
+    const name = v === PA_CR ? "" : v;
+    results.unshift({n: ++counter, line: `${street} (unit added)`, kind:"cr", tag:"Unit added", fromUnit:true,
+      name: name ? `${name} or Current Resident` : "Current Resident", peopleName: name || undefined,
+      street, city: b.bCity, zip: b.bZip, county: b.county, territories: b.territories,
+      why: name ? "Unit and name from a people-search site (unconfirmed)." : "Unit from a people-search site (unconfirmed)."});
+    added++;
+  });
+  render(); updateStatus();
+  const msg = $("umsg" + n);
+  if (msg) msg.textContent = `Added ${added} unit${added === 1 ? "" : "s"} to your list.`;
 }
 
 /* "113", "#113", "Apt 113" -> "Apt 113"; "Unit B", "Lot 14", "Ste 2" keep their own word */
@@ -1229,6 +1344,9 @@ $("results").addEventListener("click", ev => {
     else fallbackCopy(text, show);
     return;   // the link itself opens the Post Office page as usual
   }
+  const pa = ev.target.closest("[data-pasteall]"), aa = ev.target.closest("[data-addall]");
+  if (pa){ pasteAll(Number(pa.dataset.pasteall)); return; }
+  if (aa){ addAllUnits(Number(aa.dataset.addall)); return; }
   const addU = ev.target.closest("[data-addunit]"), rem = ev.target.closest("[data-remove]");
   if (addU){ addUnit(Number(addU.dataset.addunit)); return; }
   if (rem){ results = results.filter(x => x.n !== Number(rem.dataset.remove)); render(); updateStatus(); return; }
