@@ -1,0 +1,1746 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Business_9 Territory Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #f0f0f0; }
+#header {
+  background: #7B2D8B; color: white;
+  padding: 8px 16px; display: flex;
+  align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 4px; min-height: 56px; box-sizing: border-box;
+}
+#header h1 { font-size: 17px; font-weight: bold; margin: 0; line-height: 1.2; }
+#header .subtitle { font-size: 10px; opacity: 0.75; margin-top: 1px; }
+#header .stats { font-size: 12px; opacity: 0.9; }
+#map { height: calc(100vh - 96px); width: 100%; display: block; }
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+  border-left: 6px solid #7B2D8B;
+  padding: 0;
+}
+.leaflet-popup-content { margin: 0; width: 360px !important; }
+.popup-inner { padding: 18px 22px; }
+.popup-mapid {
+  font-size: 14px; color: #888; text-transform: uppercase;
+  letter-spacing: 1px; margin-bottom: 4px;
+}
+.popup-site {
+  font-size: 20px; font-weight: bold; color: #7B2D8B;
+  margin-bottom: 7px; line-height: 1.3;
+}
+.popup-owner { font-size: 17px; color: #222; margin-bottom: 4px; }
+.popup-mail { font-size: 17px; color: #555; margin-bottom: 10px; }
+.popup-badge {
+  display: inline-block; padding: 5px 12px; border-radius: 10px;
+  font-size: 14px; font-weight: bold; color: white; margin-right: 4px;
+}
+.badge-owner  { background: #7B2D8B; }
+.badge-vacant { background: #808080; }
+.badge-inst   { background: #548235; }
+.badge-biz    { background: #7B2D8B; }
+.badge-dnc    { background: #cc0000; }
+.badge-research { background: #FFFF00; color: #333; }
+.legend-resizer{position:absolute;bottom:4px;right:4px;width:14px;height:14px;cursor:se-resize;opacity:0.4;z-index:10;background:linear-gradient(135deg,transparent 50%,#888 50%,#888 60%,transparent 60%,transparent 70%,#888 70%,#888 80%,transparent 80%);}.legend-resizer:hover{opacity:0.8;}#legend {
+  position: absolute; bottom: 24px; right: 10px; z-index: 1000;
+  background: white; border-radius: 12px; padding: 16px 22px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.2); font-size: 17px;
+  min-width: 224px; cursor: move; user-select: none;
+}
+#legend h4 {
+  font-size: 18px; margin-bottom: 12px; color: #333;
+  border-bottom: 2px solid #eee; padding-bottom: 6px;
+}
+#legend-close {
+  float: right; cursor: pointer; font-size: 16px; color: #aaa;
+}
+#legend-close:hover { color: #333; }
+.legend-row { display: flex; align-items: center; margin-bottom: 10px; }
+.legend-swatch {
+  width: 20px; height: 20px; border-radius: 4px;
+  margin-right: 12px; flex-shrink: 0;
+  border: 1px solid rgba(0,0,0,0.25);
+  display: inline-block !important;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  transition: opacity 0.15s;
+}
+/* 2026-08-22: initial opacity for .legend-slidable swatches is set by the
+   startup setParcelOpacity(0.30) call (matching the Fill slider's default),
+   not hardcoded here -- DNC and Completed swatches (no .legend-slidable
+   class) are intentionally left at full opacity always, matching their
+   always-opaque map behavior. */
+#notes-bar {
+  display: none; position: absolute; top: 58px; left: 10px;
+  right: 10px; z-index: 1000;
+  background: #FFF8E1; border-left: 4px solid #F5A623;
+  border-radius: 6px; padding: 8px 12px;
+  font-size: 12px; color: #555; max-width: 500px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+#tab-bar {
+  display: flex; background: #7B2D8B;
+  padding: 0 12px; height: 40px; box-sizing: border-box;
+}
+.tab-btn {
+  padding: 8px 20px; cursor: pointer; color: rgba(255,255,255,0.7);
+  font-size: 13px; font-weight: bold; border: none;
+  background: transparent; border-bottom: 3px solid transparent;
+}
+.tab-btn.active {
+  color: white; border-bottom: 3px solid white;
+}
+
+#table-view {
+  display: none; height: calc(100vh - 90px);
+  overflow-x: scroll; overflow-y: auto; padding: 0 16px 16px; background: #f5f5f5;
+  /* 2026-08-14: paired with the scrollLeft=0 reset in showTab() -- stops
+     the browser's own scroll-anchoring from nudging this container
+     sideways again (e.g. on rotation) once the wide table is built. */
+  overflow-anchor: none;
+}
+#table-view::-webkit-scrollbar {
+  height: 12px; width: 12px;
+}
+#table-view::-webkit-scrollbar-track {
+  background: #ddd; border-radius: 6px;
+}
+#table-view::-webkit-scrollbar-thumb {
+  background: #888; border-radius: 6px;
+}
+#table-view::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+#search-box {
+  width: 100%; max-width: 400px; padding: 8px 12px;
+  border: 1px solid #ccc; border-radius: 6px;
+  font-size: 14px; margin-bottom: 12px;
+}
+#data-table {
+  width: 1480px; border-collapse: collapse;
+  table-layout: fixed;
+  background: white; font-size: 13px;
+}
+#table-wrapper {
+  display: block; overflow-x: auto;
+  border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+#data-table th {
+  background: #7B2D8B; color: white;
+  padding: 10px 12px; text-align: left;
+  cursor: pointer; white-space: nowrap;
+  user-select: none; position: sticky;
+  top: 0; z-index: 10; min-width: 60px;
+}
+#data-table th:hover { opacity: 0.85; }
+#data-table th.sort-asc::after { content: " "; font-size: 10px; }
+#data-table th.sort-desc::after { content: " "; font-size: 10px; }
+#data-table td {
+  padding: 8px 12px; border-bottom: 1px solid #eee;
+  vertical-align: top; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  max-width: 0;
+}
+#data-table td:hover {
+  white-space: normal; overflow: visible;
+  background: #fffde7; position: relative; z-index: 5;
+}
+#data-table th {
+  position: sticky; top: 0; z-index: 10;
+  resize: horizontal; overflow: auto;
+  min-width: 40px;
+}
+#data-table tr:hover td { background: #f0f4ff; }
+.badge-res   { background: #7B2D8B; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.badge-biz2  { background: #7B2D8B; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.badge-inst2 { background: #548235; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.badge-vac2  { background: #808080; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.badge-dnc2  { background: #cc0000; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.badge-res2  { background: #E65100; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+#btn-bar {
+  /* 2026-08-13: top moved from 56px (bottom of #header only) to 96px
+     (bottom of #header + #tab-bar, same 96 used in #map's height calc
+     below) -- once this wraps to multiple rows on a narrow phone, 56px
+     let it float down over the Map/Mailing List tabs, covering part of
+     the Mailing List tab. Starting below the tabs means it only ever
+     floats over the map area, no matter how tall it wraps. */
+  position: absolute; top: 96px; left: 50%; transform: translateX(-50%);
+  z-index: 1000; display: flex; gap: 8px; align-items: center;
+  /* 2026-08-13: was a single un-wrapped row -- wider than a phone screen,
+     so Share Territory (leftmost) got pushed off-screen with no way to
+     scroll a floating/absolute element back into view. Wrapping onto
+     multiple centered rows keeps every control reachable on narrow
+     screens; no change on desktop, where it already fit on one line. */
+  flex-wrap: wrap; justify-content: center; max-width: 94vw;
+}
+#header #share-btn {
+  /* 2026-08-14: moved out of the floating #btn-bar and into the header's
+     own flex row so it takes up real layout space instead of floating on
+     top of the page -- it can no longer cover the Mailing List table (or
+     anything else) underneath it. Print Map was removed at the same time
+     (rarely used, and window.print() output wasn't reliable). */
+  background: rgba(255,255,255,0.95); border: 1px solid #ccc;
+  border-radius: 8px; padding: 5px 12px;
+  font-size: 12px; font-weight: bold; color: #333;
+  cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+#header #share-btn:hover { background: #f0f0f0; }
+#header #howto-btn {
+  /* 2026-09-20: deliberately more eye-catching than Share Territory --
+     Steve wants first-time recipients to notice and open this before
+     anything else, so it needs to stand out against every possible
+     territory_color header background (navy, purple, red, gold, green). */
+  background: #ffffff; border: 2px solid #E65100;
+  border-radius: 8px; padding: 7px 16px;
+  font-size: 14px; font-weight: bold; color: #E65100;
+  text-decoration: none; cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+}
+#header #howto-btn:hover { background: #FFF3E8; }
+#howto-panel {
+  position: fixed; z-index: 5000;
+  background: white; border-radius: 10px;
+  box-shadow: 0 6px 32px rgba(0,0,0,0.35);
+  display: none; flex-direction: column;
+  min-width: 280px; min-height: 200px;
+  overflow: hidden;
+}
+#howto-panel.open { display: flex; }
+#howto-panel.minimized { height: auto !important; }
+#howto-panel.minimized .howto-panel-body,
+#howto-panel.minimized .howto-resize-handle { display: none; }
+#howto-panel-titlebar {
+  background: #E65100; color: white; padding: 9px 10px 9px 14px;
+  font-size: 14px; font-weight: bold;
+  display: flex; align-items: center; justify-content: space-between;
+  cursor: move; user-select: none; flex-shrink: 0;
+  touch-action: none;
+}
+#howto-panel-titlebar .howto-title-text {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.howto-panel-btns { display: flex; gap: 6px; flex-shrink: 0; margin-left: 8px; }
+.howto-panel-btn {
+  cursor: pointer; width: 24px; height: 24px; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: bold; line-height: 1;
+  background: rgba(255,255,255,0.18);
+}
+.howto-panel-btn:hover { background: rgba(255,255,255,0.35); }
+.howto-panel-body {
+  flex: 1; overflow: auto; -webkit-overflow-scrolling: touch;
+  min-height: 0;
+}
+.howto-panel-body iframe {
+  width: 100%; height: 100%; border: none; display: block;
+}
+.howto-resize-handle {
+  position: absolute; right: 0; bottom: 0; width: 22px; height: 22px;
+  cursor: nwse-resize; touch-action: none;
+  background: linear-gradient(135deg, transparent 55%, #bbb 55%, #bbb 62%,
+    transparent 62%, transparent 72%, #bbb 72%, #bbb 79%,
+    transparent 79%, transparent 89%, #bbb 89%, #bbb 96%, transparent 96%);
+}
+@media print {
+  @page { margin: 0; size: auto; }
+  #header, #tab-bar, #btn-bar, #mapid-search,
+  #notes-bar, #table-view, #howto-panel,
+  .leaflet-control-container { display: none !important; }
+  html, body { margin: 0 !important; padding: 0 !important;
+                overflow: hidden !important; }
+  #map { position: fixed !important;
+          top: 0 !important; left: 0 !important;
+          width: 100vw !important; height: 100vh !important;
+          z-index: 1 !important; }
+  #legend { z-index: 2 !important;
+             max-width: 200px !important;
+             right: 10px !important;
+             bottom: 10px !important;
+             left: auto !important;
+             top: auto !important;
+             font-size: 13px !important; }
+}
+#mapid-search {
+  background: rgba(255,255,255,0.97); border: 1px solid #ccc;
+  border-radius: 8px; padding: 6px 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  display: flex; align-items: center; gap: 8px;
+}
+#mapid-search input {
+  border: none; outline: none; font-size: 13px;
+  width: 80px; background: transparent;
+}
+#mapid-search label {
+  font-size: 12px; color: #666; white-space: nowrap;
+}
+#mapid-search-clear {
+  cursor: pointer; color: #aaa; font-size: 14px;
+  display: none;
+}
+#mapid-search-clear:hover { color: #333; }
+#table-body{
+  /* 2026-08-14: the .ml-hdr banner strips (street address / building-type
+     bars) are plain divs, not grids -- they can't size themselves to
+     match their sibling .ml-row/.ml-col-header's 1135px-wide grid content
+     the way width:max-content works on those. Fixing #table-body itself
+     to its content's real width instead makes every plain-div child
+     (which defaults to filling 100% of ITS parent) stretch to match,
+     same fix family as the .ml-row/.ml-col-header width rules below. */
+  width: max-content; min-width: 100%;
+}
+.ml-hdr{padding:10px 16px;font-weight:bold;font-size:13px;color:white;letter-spacing:0.5px;}
+/* 2026-08-14: without an explicit width, a grid row/header only sizes
+   itself to the *viewport's* width (its containing block), even though
+   its grid-template-columns add up to something much wider (the
+   Multi-Occupant table's 11 columns run ~1135px). The extra columns still
+   render -- that's why scrolling right shows the data -- but the row's
+   own background paint stops at its (viewport-width) box edge, so every
+   column past that point looks blank/white on a phone. On a desktop
+   window wider than 1135px this never showed up, since the row's
+   viewport-constrained width already covered the whole table. max-content
+   makes the row/header size itself to its actual grid content instead;
+   min-width:100% keeps it filling the full width on screens wider than
+   the table itself, same as before. */
+.ml-col-header{display:grid;width:max-content;min-width:100%;background:#4472C4;color:white;font-size:12px;font-weight:bold;}
+/* 2026-08-18: Steve's call -- visible gridlines on both the column header
+   and every data row, spreadsheet-style. Header's divider was already
+   there but very faint (white-on-blue); data rows had no vertical divider
+   at all, just a bottom line on the whole row. */
+.ml-col-header span{padding:6px 8px;white-space:nowrap;overflow:hidden;
+  border-right:1px solid rgba(255,255,255,0.45);cursor:pointer;user-select:none;}
+.ml-col-header span:hover{background:rgba(255,255,255,0.15);}
+.ml-row{display:grid;width:max-content;min-width:100%;font-size:12px;border-bottom:1px solid #ccc;}
+.ml-row span{padding:5px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  border-right:1px solid #ddd;}
+.ml-row span:last-child{border-right:none;}
+.ml-row:hover span{white-space:normal;overflow:visible;background:#fffde7;
+  position:relative;z-index:5;}
+/* 2026-08-17: Occupancy carries a full sentence now, not a short tag --
+   wrap it permanently (not just on hover like other columns) so it's
+   readable without needing to mouse over every row. */
+.ml-wrap{white-space:normal !important;overflow:visible !important;
+  text-overflow:clip !important;word-break:break-word;line-height:1.3;}
+.check-icon{font-size:16px;cursor:pointer;background:rgba(255,255,255,0.85);
+  border-radius:3px;display:flex;align-items:center;justify-content:center;
+  line-height:1;border:none!important;box-shadow:none!important;}
+.check-icon:hover{background:rgba(255,255,255,1);}
+.ml-even-g{background:#E2EFDA;}
+.ml-odd{background:#FFFFFF;}
+.ml-even-y{background:#FFF2CC;}
+.ml-dnc{background:#FFB3B3;}
+.ml-gap{height:12px;background:#e8e8e8;}
+.ml-none{padding:8px 16px;color:#888;font-size:12px;font-style:italic;}
+.popup-done-btn{transition:background 0.15s;}
+.popup-done-btn:hover{background:#f0f0f0 !important;}
+</style>
+</head>
+<body>
+<!-- 2026-08-17: diagonal-hatch pattern for excluded/DNC parcels & buildings,
+     Steve's request to make them stand out beyond just red fill. Referenced
+     via fillColor:'url(#dncHatch)' by a small SVG-rendered overlay layer
+     added on top of the main canvas-rendered map (the main layer uses
+     preferCanvas for performance, and canvas fills can't reference an SVG
+     pattern -- so the hatch draws in its own tiny SVG layer instead, just
+     for the handful of excluded features, not the whole parcel set). -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <pattern id="dncHatch" patternUnits="userSpaceOnUse" width="10" height="10" patternTransform="rotate(45)">
+      <rect width="10" height="10" fill="#CC0000"></rect>
+      <line x1="0" y1="0" x2="0" y2="10" stroke="#660000" stroke-width="4"></line>
+    </pattern>
+    <!-- 2026-09-02: green hatch for territory sitting inside another (a
+         separately-drawn apartment/trailer-park territory the containing
+         territory should not also work) -- same technique as dncHatch
+         above. Color is Territory Helper's real Apartment-type color
+         (#3DC789), sampled directly from Steve's own TH color palette. -->
+    <pattern id="segChildHatch" patternUnits="userSpaceOnUse" width="10" height="10" patternTransform="rotate(45)">
+      <rect width="10" height="10" fill="#3DC789"></rect>
+      <line x1="0" y1="0" x2="0" y2="10" stroke="#1E6344" stroke-width="4"></line>
+    </pattern>
+  </defs>
+</svg>
+<div id="header">
+  <div>
+    <h1>Business_9 Territory</h1>
+    <div class="subtitle">Business_9_20261124_1935.xlsx</div>
+  </div>
+  <a id="howto-btn" href="javascript:void(0)" onclick="openHowToPanel();return false;">&#x2753; How to Use This</a>
+  <div class="stats">
+    45 parcels &nbsp;&nbsp;
+    10 owner occupied &nbsp;&nbsp;
+    11 need research &nbsp;&nbsp;
+    16 vacant
+    
+  </div>
+  <button id="share-btn" onclick="shareTerritory()">&#x2709; Share Territory</button>
+</div>
+<div id="howto-panel">
+  <div id="howto-panel-titlebar">
+    <span class="howto-title-text">&#x2753; How to Use This</span>
+    <div class="howto-panel-btns">
+      <div class="howto-panel-btn" id="howto-minimize-btn" title="Minimize">&#x2212;</div>
+      <div class="howto-panel-btn" id="howto-close-btn" title="Close">&#x2715;</div>
+    </div>
+  </div>
+  <div class="howto-panel-body">
+    <iframe id="howto-iframe" title="How to Use This guide"></iframe>
+  </div>
+  <div class="howto-resize-handle" id="howto-resize-handle"></div>
+</div>
+
+<div id="tab-bar">
+  <button class="tab-btn active" onclick="showTab('map')">&#x1F5FA; Map</button>
+  <button class="tab-btn" onclick="showTab('table')">&#x1F4CB; Mailing List</button>
+</div>
+<div id="map"></div>
+<div id="table-view">
+  <!-- 2026-08-18: Steve's call -- pin the search/Share Progress row to the
+       top of the Mailing List tab so it stays visible while scrolling
+       through a long territory, instead of scrolling away with the table. -->
+  <div id="ml-searchbar" style="padding:10px 16px 6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;top:0;z-index:20;background:#f5f5f5;">
+    <input type="text" id="search-box" placeholder="Search by name, address, MapID..." oninput="filterTable()"
+      style="padding:7px 12px;border:1px solid #ccc;border-radius:6px;font-size:13px;width:300px;">
+    <button onclick="shareProgress()" style="padding:7px 14px;border:1px solid #ccc;border-radius:6px;font-size:13px;cursor:pointer;background:white;font-weight:bold;">&#x1F4CB; Share Progress</button>
+  </div>
+  <div id="table-body"></div>
+</div>
+<div id="btn-bar">
+<div id="mapid-search">
+  <label>&#x1F50D; MapID</label>
+  <input type="number" id="mapid-input" placeholder="e.g. 42" min="1"
+    oninput="searchMapID(this.value)"
+    onkeydown="if(event.key==='Escape'){clearMapID();}" />
+  <span id="mapid-search-clear" onclick="clearMapID()">&#x2715;</span>
+</div>
+<div id="opacity-ctrl" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.97);border:1px solid #ccc;border-radius:8px;padding:6px 12px;box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+  <label style="font-size:12px;color:#666;white-space:nowrap;">&#x1F3A8; Fill</label>
+  <input type="range" id="opacity-slider" min="0" max="100" value="30"
+    style="width:80px;cursor:pointer;"
+    oninput="setParcelOpacity(this.value/100)" />
+  <span id="opacity-val" style="font-size:12px;color:#666;width:32px;">30%</span>
+</div>
+<div id="basemap-ctrl" style="display:flex;align-items:center;background:rgba(255,255,255,0.97);border:1px solid #ccc;border-radius:8px;padding:6px 12px;box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+  <button id="basemap-toggle-btn" onclick="toggleBasemap()" style="border:none;background:transparent;cursor:pointer;font-size:12px;color:#666;font-weight:bold;white-space:nowrap;">&#x1F5FA; Use Carto</button>
+</div>
+</div>
+<div id="legend">
+  <h4>Legend <span id="legend-close" onclick="document.getElementById('legend').style.display='none'">&#x2715;</span></h4>
+  <div class="legend-row">
+    <div class="legend-swatch legend-slidable" style="background:#2E5496"></div>Confident Resident
+  </div>
+  <div class="legend-row">
+    <div class="legend-swatch legend-slidable" style="background:#FFFF00"></div>Needs Research
+  </div>
+  <div class="legend-row">
+    <div class="legend-swatch legend-slidable" style="background:#228B22"></div>Verified
+  </div>
+  <div class="legend-row">
+    <div class="legend-swatch legend-slidable" style="background:#E65100"></div>Suspect — verify before mailing
+  </div>
+  <div class="legend-row">
+    <div class="legend-swatch legend-slidable" style="background:#8B4513"></div>Institution
+  </div>
+  <div class="legend-row">
+    <div class="legend-swatch legend-slidable" style="background:#7B2D8B"></div>Business
+  </div>
+  <div class="legend-row">
+    <div class="legend-swatch legend-slidable" style="background:#808080"></div>Vacant
+  </div>
+  <div class="legend-row">
+    <!-- 2026-08-22: hatch-pattern swatch (not a plain fade-able solid) --
+         matches the map's own DNC hatch overlay, and stays this way
+         regardless of the Fill slider, same as the map. -->
+    <div class="legend-swatch" style="background:repeating-linear-gradient(45deg,#CC0000,#CC0000 3px,#7a0000 3px,#7a0000 6px)"></div>Do Not Contact
+  </div>
+  <div class="legend-row">
+    <div class="legend-swatch" style="background:repeating-linear-gradient(45deg,#3DC789,#3DC789 3px,#1E6344 3px,#1E6344 6px)"></div>Covered by Another Territory
+  </div>
+  <div class="legend-row">
+    <div class="legend-swatch" style="background:none;border:none;display:flex;align-items:center;justify-content:center"><svg width="20" height="17" viewBox="0 0 26 22" style="display:block"><path d="M2 10 L13 2 L24 10 V20 H2 Z" fill="#fff" stroke="#444" stroke-width="2"/><rect x="7" y="11" width="12" height="9" fill="#ddd" stroke="#444" stroke-width="1.5"/><line x1="7" y1="14" x2="19" y2="14" stroke="#444"/><line x1="7" y1="17" x2="19" y2="17" stroke="#444"/></svg></div>No address &mdash; not mailed (garage / shed)
+  </div>
+  <div class="legend-row">
+    <div class="legend-swatch" style="background:#000000;border:2px solid #FFFFFF;box-sizing:border-box"></div>Completed
+  </div>
+  <div class="legend-resizer" id="legend-resizer"></div>
+</div>
+<script>
+var map = L.map('map', {zoomControl: true, preferCanvas: true, scrollWheelZoom: false, zoomSnap: 0.25, zoomDelta: 0.25});
+document.getElementById('map').addEventListener('wheel', function(e){ e.preventDefault(); var delta = e.deltaY > 0 ? -0.25 : 0.25; var mousePos = map.mouseEventToLatLng(e); map.setZoomAround(mousePos, map.getZoom() + delta); }, {passive: false});
+var _osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: ' OpenStreetMap contributors', maxZoom: 19, subdomains: 'abc'
+});
+var _cartoKey = "cb1_26eq_1_38b9fa4d14df49a77af04ee5";
+var _cartoLayer = _cartoKey ? L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=' + _cartoKey, {
+  attribution: ' OpenStreetMap contributors | CartoDB', maxZoom: 20, subdomains: 'abcd'
+}) : null;
+// 2026-09-14: Carto is now the PRIMARY basemap and OpenStreetMap the
+// backup -- the reverse of the v5.12/v5.13 setup. Steve was hitting
+// OpenStreetMap's usage-policy tile (repeated pipeline runs during
+// testing reads as automated overuse to their tile servers) and has his
+// own Carto key, so Carto loads first now. If no Carto key is configured
+// (e.g. another congregation's copy of this pipeline with no key of
+// their own), this falls back to plain OpenStreetMap automatically --
+// there's always a working default map either way, same fallback
+// guarantee as before.
+// 2026-10-05 (v5.22): OpenStreetMap is the PRIMARY basemap again, Carto the
+// backup (if a Carto key is configured). If OSM tiles fail or are blocked,
+// the tileerror auto-fallback below switches to Carto automatically.
+var _primaryLayer = _osmLayer;
+var _backupLayer  = _cartoLayer;
+var _primaryName  = 'OpenStreetMap';
+var _backupName   = 'Carto';
+// 2026-10-05 (v5.23): a map double-clicked in File Explorer opens as a
+// file (file://), and OpenStreetMap always blocks those ("Access blocked"
+// tiles). In that case start on Carto instead, with OSM as the switch.
+// Opened from Territory Master (localhost) or GitHub Pages -> OSM as normal.
+// 2026-11-24 (v5.38): Carto no longer works for file-opened maps either
+// (the Carto key is now limited to the GitHub site), so a file-opened map
+// shows no background map at all (instead of "Access blocked" tiles) and
+// a bar offering the online copy -- see _fileOpenBar below.
+var _openedAsFile = (location.protocol === 'file:');
+var _primaryFailCount = 0;
+var _swappedToBackup = false;
+_primaryLayer.on('tileerror', function() {
+  _primaryFailCount++;
+  if (_primaryFailCount >= 4) { _swapToBackupBasemap(); }
+});
+if (!_openedAsFile) _primaryLayer.addTo(map);
+// 2026-09-11: no backup available (no Carto key configured) -- there's
+// nothing for the button to switch to, so hide it entirely rather than
+// leave a button that does nothing when tapped. Same silently-disabled
+// rule the auto-fallback above already follows.
+var _bmBtn0 = document.getElementById('basemap-toggle-btn');
+if (_bmBtn0) _bmBtn0.innerHTML = '&#x1F5FA; Use ' + _backupName;
+if (!_backupLayer || _openedAsFile) {
+  var _bmCtrl = document.getElementById('basemap-ctrl');
+  if (_bmCtrl) _bmCtrl.style.display = 'none';
+}
+
+var boundaryData = {"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"coordinates": [[[-88.4218740463257, 43.78413900387448], [-88.40093135833742, 43.78358131068962], [-88.40067386627197, 43.787299166982564], [-88.42195987701416, 43.78711327965964], [-88.4218740463257, 43.78413900387448], [-88.4218740463257, 43.78413900387448]]], "type": "Polygon"}, "properties": {}}]};
+var buildingsData = {"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.402739, 43.784143], [-88.402814, 43.784143], [-88.402814, 43.784276], [-88.402739, 43.784276], [-88.402739, 43.784143]]]}, "properties": {"mapid": 28, "subid": "28", "site": "1097 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "secondary": true, "label_lon": -88.4027765, "label_lat": 43.7842095}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.421261, 43.784719], [-88.420728, 43.784713], [-88.420732, 43.784547], [-88.421265, 43.784553], [-88.421261, 43.784719]]]}, "properties": {"mapid": 18, "subid": "18", "site": "231 N NATIONAL AVENUE, Fond du Lac WI 54935", "owner": "VTAE DISTRICT 10", "salute": "Dear Neighbor", "sheet": "Main", "dnc": "", "secondary": true, "label_lon": -88.4209965, "label_lat": 43.784633}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.417207, 43.784797], [-88.417124, 43.784797], [-88.417124, 43.784683], [-88.417207, 43.784683], [-88.417207, 43.784797]]]}, "properties": {"mapid": 18, "subid": "18", "site": "231 N NATIONAL AVENUE, Fond du Lac WI 54935", "owner": "VTAE DISTRICT 10", "salute": "Dear Neighbor", "sheet": "Main", "dnc": "", "secondary": true, "label_lon": -88.41716550000001, "label_lat": 43.78474}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.416543, 43.785174], [-88.416544, 43.785042], [-88.417087, 43.785045], [-88.417086, 43.785177], [-88.416543, 43.785174]]]}, "properties": {"mapid": 18, "subid": "18", "site": "231 N NATIONAL AVENUE, Fond du Lac WI 54935", "owner": "VTAE DISTRICT 10", "salute": "Dear Neighbor", "sheet": "Main", "dnc": "", "secondary": true, "label_lon": -88.416815, "label_lat": 43.7851095}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.417612, 43.785017], [-88.41743, 43.78499], [-88.417363, 43.784649], [-88.417077, 43.784678], [-88.417025, 43.784859], [-88.416587, 43.784794], [-88.416474, 43.784222], [-88.418258, 43.784485], [-88.418034, 43.785277], [-88.418241, 43.785308], [-88.418287, 43.785145], [-88.418608, 43.785337], [-88.418381, 43.785453], [-88.418166, 43.785325], [-88.418084, 43.785617], [-88.419177, 43.785505], [-88.419198, 43.785611], [-88.419372, 43.785637], [-88.419432, 43.785423], [-88.419911, 43.785374], [-88.419998, 43.785821], [-88.419182, 43.7857], [-88.418765, 43.786064], [-88.418024, 43.785955], [-88.418234, 43.785772], [-88.41845, 43.78575], [-88.41843, 43.785649], [-88.415882, 43.785909], [-88.415813, 43.785557], [-88.416493, 43.785657], [-88.41659, 43.785311], [-88.417702, 43.785475], [-88.417612, 43.785017]]]}, "properties": {"mapid": 18, "subid": "18", "site": "231 N NATIONAL AVENUE, Fond du Lac WI 54935", "owner": "VTAE DISTRICT 10", "salute": "Dear Neighbor", "sheet": "Main", "dnc": "", "label_lon": -88.41785700538132, "label_lat": 43.785081000000005}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.416359, 43.785591], [-88.416231, 43.785591], [-88.416231, 43.785537], [-88.416359, 43.785537], [-88.416359, 43.785591]]]}, "properties": {"mapid": 18, "subid": "18", "site": "231 N NATIONAL AVENUE, Fond du Lac WI 54935", "owner": "VTAE DISTRICT 10", "salute": "Dear Neighbor", "sheet": "Main", "dnc": "", "secondary": true, "label_lon": -88.41629499999999, "label_lat": 43.785563999999994}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.411785, 43.784039], [-88.411784, 43.784114], [-88.411666, 43.784113], [-88.411663, 43.784281], [-88.411534, 43.78428], [-88.411537, 43.784108], [-88.411341, 43.784106], [-88.411342, 43.784035], [-88.411785, 43.784039]]]}, "properties": {"mapid": 36, "subid": "36", "site": "919 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager, Korneli's", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "label_lon": -88.41159997383721, "label_lat": 43.784197000000006}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.411523, 43.784168], [-88.411523, 43.784234], [-88.411344, 43.784234], [-88.411344, 43.784168], [-88.411523, 43.784168]]]}, "properties": {"mapid": 36, "subid": "36", "site": "919 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager, Korneli's", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "secondary": true, "label_lon": -88.4114335, "label_lat": 43.784200999999996}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.410483, 43.784145], [-88.410483, 43.784298], [-88.410123, 43.784298], [-88.410123, 43.784145], [-88.410483, 43.784145]]]}, "properties": {"mapid": 43, "subid": "43", "site": "949 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "label_lon": -88.410303, "label_lat": 43.7842215}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.409523, 43.784389], [-88.40933, 43.784386], [-88.409341, 43.784086], [-88.409534, 43.784089], [-88.409523, 43.784389]]]}, "properties": {"mapid": 38, "subid": "38", "site": "969 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager, Culver's", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "label_lon": -88.409432, "label_lat": 43.7842375}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.410791, 43.784176], [-88.41079, 43.7841], [-88.411031, 43.784099], [-88.411032, 43.784184], [-88.411062, 43.784184], [-88.411063, 43.784251], [-88.411033, 43.784252], [-88.411034, 43.784315], [-88.411061, 43.784315], [-88.411062, 43.784416], [-88.410876, 43.784417], [-88.410872, 43.784175], [-88.410791, 43.784176]]]}, "properties": {"mapid": 37, "subid": "37", "site": "929 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager, McDonald's", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "label_lon": -88.41095364669422, "label_lat": 43.7842835}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.412398, 43.784432], [-88.412399, 43.784486], [-88.412128, 43.784487], [-88.412126, 43.784154], [-88.412322, 43.784153], [-88.412321, 43.784132], [-88.412367, 43.784132], [-88.412367, 43.784155], [-88.412563, 43.784154], [-88.412565, 43.784431], [-88.412398, 43.784432]]]}, "properties": {"mapid": 35, "subid": "35", "site": "889 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager, C.D. Smith Construction", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "label_lon": -88.41234541922248, "label_lat": 43.784293}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.411655, 43.78456], [-88.411487, 43.784558], [-88.41149, 43.784441], [-88.411657, 43.784443], [-88.411655, 43.78456]]]}, "properties": {"mapid": 36, "subid": "36", "site": "919 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager, Korneli's", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "secondary": true, "label_lon": -88.41157224572649, "label_lat": 43.7845005}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.41022, 43.784493], [-88.41022, 43.784604], [-88.410273, 43.784604], [-88.410273, 43.784683], [-88.410155, 43.784683], [-88.410155, 43.784623], [-88.410105, 43.784623], [-88.410105, 43.784493], [-88.41022, 43.784493]]]}, "properties": {"mapid": 34, "subid": "34", "site": "30 KAIRIS COURT, Fond du Lac WI 54935", "owner": "JOHN E BOSTWICK", "salute": "Dear John and Diane", "sheet": "Main", "dnc": "", "label_lon": -88.4101625, "label_lat": 43.7845485}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.409437, 43.78458], [-88.409641, 43.78458], [-88.409641, 43.784828], [-88.409437, 43.784828], [-88.409437, 43.78458]]]}, "properties": {"mapid": 33, "subid": "33", "site": "29 KAIRIS COURT, Fond du Lac WI 54935", "owner": "LAURA SCHULTZ", "salute": "Dear Laura", "sheet": "Main", "dnc": "", "label_lon": -88.409539, "label_lat": 43.784704}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.412822, 43.784797], [-88.412985, 43.784797], [-88.412985, 43.785127], [-88.412822, 43.785127], [-88.412822, 43.784797]]]}, "properties": {"mapid": 29, "subid": "29", "site": "240 N PRAIRIE ROAD, Fond du Lac WI 54935", "owner": "Owner or Manager", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "secondary": true, "label_lon": -88.4129035, "label_lat": 43.784962}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.412505, 43.785418], [-88.412125, 43.785416], [-88.41213, 43.784846], [-88.412201, 43.784846], [-88.4122, 43.78491], [-88.412274, 43.784911], [-88.412275, 43.784803], [-88.412485, 43.784804], [-88.412485, 43.784909], [-88.41251, 43.784909], [-88.412505, 43.785418]]]}, "properties": {"mapid": 29, "subid": "29", "site": "240 N PRAIRIE ROAD, Fond du Lac WI 54935", "owner": "Owner or Manager", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "label_lon": -88.41231735745615, "label_lat": 43.785163499999996}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.410333, 43.785053], [-88.410333, 43.785223], [-88.410193, 43.785223], [-88.410193, 43.785185], [-88.410139, 43.785185], [-88.410139, 43.785063], [-88.410236, 43.785063], [-88.410236, 43.785022], [-88.410292, 43.785022], [-88.410292, 43.785053], [-88.410333, 43.785053]]]}, "properties": {"mapid": 23, "subid": "23", "site": "48 KAIRIS COURT, Fond du Lac WI 54935", "owner": "BRENDA J LEHMAN", "salute": "Dear Brenda and Paul", "sheet": "Main", "dnc": "", "label_lon": -88.410236, "label_lat": 43.785123999999996}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.411133, 43.785289], [-88.411178, 43.785288], [-88.411179, 43.785311], [-88.411134, 43.785312], [-88.411133, 43.785289]]]}, "properties": {"mapid": 21, "subid": "21", "site": "243 N PRAIRIE ROAD, Fond du Lac WI 54935", "owner": "Owner or Manager", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "secondary": true, "label_lon": -88.411156, "label_lat": 43.7853}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.405934, 43.783922], [-88.406172, 43.783922], [-88.406172, 43.784003], [-88.405934, 43.784003], [-88.405934, 43.783922]]]}, "properties": {"mapid": 40, "subid": "40", "site": "1061 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager, Kwik Trip", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "secondary": true, "label_lon": -88.406053, "label_lat": 43.7839625}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.406312, 43.784369], [-88.406057, 43.784369], [-88.406057, 43.784091], [-88.406312, 43.784091], [-88.406312, 43.784369]]]}, "properties": {"mapid": 40, "subid": "40", "site": "1061 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager, Kwik Trip", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "label_lon": -88.4061845, "label_lat": 43.784229999999994}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.405684, 43.784096], [-88.405842, 43.784096], [-88.405842, 43.784428], [-88.405684, 43.784428], [-88.405684, 43.784096]]]}, "properties": {"mapid": 40, "subid": "40", "site": "1061 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager, Kwik Trip", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "secondary": true, "label_lon": -88.40576300000001, "label_lat": 43.784262}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.407174, 43.784136], [-88.407525, 43.784142], [-88.407523, 43.784213], [-88.407469, 43.784212], [-88.407466, 43.784307], [-88.407403, 43.784306], [-88.4074, 43.784391], [-88.407294, 43.78439], [-88.407297, 43.784308], [-88.407168, 43.784306], [-88.407174, 43.784136]]]}, "properties": {"mapid": 39, "subid": "39", "site": "1045 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager, Verve, a Credit Union", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "label_lon": -88.40731857058823, "label_lat": 43.784259500000005}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.409257, 43.784923], [-88.408919, 43.784923], [-88.408919, 43.784776], [-88.409257, 43.784776], [-88.409257, 43.784923]]]}, "properties": {"mapid": 31, "subid": "31", "site": "64 KAIRIS COURT, Fond du Lac WI 54935", "owner": "DRENDEL PROPERTIES LLC", "salute": "Dear Resident or Business Owner", "sheet": "Main", "dnc": "", "label_lon": -88.409088, "label_lat": 43.7848495}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.406577, 43.7864], [-88.406458, 43.786403], [-88.406459, 43.786445], [-88.406256, 43.786449], [-88.40625, 43.786313], [-88.406573, 43.786306], [-88.406577, 43.7864]]]}, "properties": {"mapid": 12, "subid": "12", "site": "1066 PINE LAKE DRIVE, Fond du Lac WI 54935", "owner": "PAUL F SMEDBERG", "salute": "Dear Paul and Catherine", "sheet": "Main", "dnc": "", "label_lon": -88.40641353402691, "label_lat": 43.7863565}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.40718219455024, 43.787242330794], [-88.407187, 43.787127], [-88.407166, 43.787121], [-88.407166, 43.787109], [-88.407232, 43.786972], [-88.407259, 43.786972], [-88.407467, 43.787031], [-88.407466, 43.787049], [-88.40744, 43.787102], [-88.407371, 43.787101], [-88.407319, 43.78721], [-88.40731770219053, 43.78724114742748], [-88.40718219455024, 43.787242330794]]]}, "properties": {"mapid": 3, "subid": "3", "site": "326 N COUNTRY LANE, Fond du Lac WI 54935", "owner": "DAVID P ERTL", "salute": "Dear David and Gabriel", "sheet": "Main", "dnc": "", "label_lon": -88.40726826967119, "label_lat": 43.787105499999996}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.405717, 43.7853], [-88.405502, 43.785296], [-88.405511, 43.785072], [-88.404551, 43.785052], [-88.404549, 43.785114], [-88.404482, 43.785113], [-88.40447, 43.785411], [-88.404087, 43.785403], [-88.404084, 43.785474], [-88.403911, 43.785471], [-88.403913, 43.785426], [-88.403602, 43.78542], [-88.403602, 43.785413], [-88.403408, 43.78541], [-88.403407, 43.785437], [-88.403295, 43.785435], [-88.403296, 43.785407], [-88.403243, 43.785406], [-88.403255, 43.785105], [-88.402297, 43.785086], [-88.402304, 43.784918], [-88.40325, 43.784938], [-88.403255, 43.784793], [-88.403571, 43.7848], [-88.403573, 43.784759], [-88.404551, 43.784779], [-88.404549, 43.784827], [-88.405734, 43.784851], [-88.405717, 43.7853]]]}, "properties": {"mapid": 28, "subid": "28", "site": "1097 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "label_lon": -88.40386465429552, "label_lat": 43.785205000000005}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.403635, 43.786958], [-88.403553, 43.786954], [-88.403556, 43.786912], [-88.40342, 43.786905], [-88.403423, 43.786873], [-88.403389, 43.786871], [-88.403395, 43.786804], [-88.403432, 43.786805], [-88.403443, 43.78668], [-88.403595, 43.786687], [-88.403594, 43.786696], [-88.403658, 43.786699], [-88.403635, 43.786958]]]}, "properties": {"mapid": 10, "subid": "10", "site": "1135 PINE LAKE DRIVE, Fond du Lac WI 54935", "owner": "JOSEPH ABHOLD", "salute": "Dear Joseph and Kathryn", "sheet": "Main", "dnc": "", "label_lon": -88.40351880579726, "label_lat": 43.786838}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.409927, 43.785289], [-88.409927, 43.785394], [-88.4096, 43.785394], [-88.4096, 43.785289], [-88.409927, 43.785289]]]}, "properties": {"mapid": 24, "subid": "24", "site": "53 KAIRIS COURT, Fond du Lac WI 54935", "owner": "KURT PIEPER", "salute": "Dear Kurt and Kim", "sheet": "Main", "dnc": "", "label_lon": -88.4097635, "label_lat": 43.7853415}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.410989, 43.785174], [-88.411683, 43.785177], [-88.41168, 43.785645], [-88.411213, 43.785644], [-88.411215, 43.785336], [-88.411253, 43.785336], [-88.411253, 43.78528], [-88.410988, 43.785279], [-88.410989, 43.785174]]]}, "properties": {"mapid": 21, "subid": "21", "site": "243 N PRAIRIE ROAD, Fond du Lac WI 54935", "owner": "Owner or Manager", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "label_lon": -88.41144749679486, "label_lat": 43.785489999999996}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.412211, 43.785868], [-88.412212, 43.785659], [-88.412928, 43.785659], [-88.412928, 43.785869], [-88.412211, 43.785868]]]}, "properties": {"mapid": 19, "subid": "19", "site": "270 N PRAIRIE ROAD, Fond du Lac WI 54935", "owner": "Owner or Manager", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "label_lon": -88.41256974999999, "label_lat": 43.7857635}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.4048767397429, 43.784098540426314], [-88.40489601377679, 43.78409825676624], [-88.40489562224306, 43.78408429295389], [-88.4050192915691, 43.78408247159509], [-88.40501840961988, 43.78405105459226], [-88.4051372613017, 43.78404930380203], [-88.40514036357352, 43.78415984607027], [-88.40514999997934, 43.7841597037679], [-88.40515143706834, 43.78421090231041], [-88.40513858810313, 43.7842110914465], [-88.40513992759657, 43.78425879881116], [-88.40488134427412, 43.784262607798], [-88.4048767397429, 43.784098540426314]]]}, "properties": {"mapid": 41, "subid": "41", "site": "1073 E JOHNSON STREET, Fond du Lac WI 54935", "owner": "Owner or Manager", "salute": "Dear Owner or Manager", "sheet": "Main", "dnc": "", "label_lon": -88.405008549673, "label_lat": 43.784129122097106}}]};
+var childTerritoriesData = null;
+var childBuildingsData = null;
+var streetLabelsData = [];
+var TERRITORY_LABEL_LAT = 43.78562614176706; var TERRITORY_LABEL_LNG = -88.41135334933534;
+var isApartment = false;
+var _TERRITORY = 'Business_9'; var _PAGES_BASE = 'https://fdlterritories.github.io/Territory-Maps-and-MailLists';
+var _BUILD_TS = '20261124_193542';
+var FIREBASE_CONFIG = {"apiKey": "AIzaSyAkP3qiXWwqWt9OgBPhmcCnk6OuaZKWi0w", "authDomain": "territory-master-sync.firebaseapp.com", "databaseURL": "https://territory-master-sync-default-rtdb.firebaseio.com", "projectId": "territory-master-sync", "storageBucket": "territory-master-sync.firebasestorage.app", "messagingSenderId": "558973947206", "appId": "1:558973947206:web:6cf0b1fc790387bfede947"};
+var tableData = [{"mapid": "(No data)", "owner": "", "owner2": "", "site": "", "site_city": "", "site_state": "", "site_zip": "", "mail": "", "city": "", "state": "", "zip": "", "btype": "", "ownertype": "", "occupied": "", "confidence": "", "addressas": "", "salute": "", "dnc": "", "research": "", "notes": "No site address on file -- confirm location and who to contact before mailing.", "occupancy": "Unknown \u2014 not enough information to determine occupancy", "sheet": "Institutions", "verified_name": "", "source": "Tax Record"}, {"mapid": "1", "owner": "THOMAS J VAREBROOK", "owner2": "REBECCA E VAREBROOK", "site": "1162 SPRING LAKE DRIVE", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "1162 SPRING LAKE DR", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Residential", "ownertype": "Person", "occupied": "Yes", "confidence": "High", "addressas": "Thomas J Varebrook and Rebecca E Varebrook", "salute": "Dear Thomas and Rebecca", "dnc": "", "research": "No", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "sheet": "Main", "verified_name": "", "source": "Classifier"}, {"mapid": "3", "owner": "DAVID P ERTL", "owner2": "GABRIEL I ERTL", "site": "326 N COUNTRY LANE", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "326 NORTH COUNTRY LN", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Residential", "ownertype": "Person", "occupied": "Yes", "confidence": "High", "addressas": "David P Ertl and Gabriel I Ertl", "salute": "Dear David and Gabriel", "dnc": "", "research": "No", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "sheet": "Main", "verified_name": "", "source": "Classifier"}, {"mapid": "10", "owner": "JOSEPH ABHOLD", "owner2": "KATHRYN ABHOLD", "site": "1135 PINE LAKE DRIVE", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "1135 PINE LAKE DR", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Residential", "ownertype": "Person", "occupied": "Yes", "confidence": "High", "addressas": "Joseph Abhold and Kathryn Abhold", "salute": "Dear Joseph and Kathryn", "dnc": "", "research": "No", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "sheet": "Main", "verified_name": "", "source": "Classifier"}, {"mapid": "12", "owner": "PAUL F SMEDBERG", "owner2": "CATHERINE L SMEDBERG", "site": "1066 PINE LAKE DRIVE", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "1066 PINE LAKE DR", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Residential", "ownertype": "Person", "occupied": "Yes", "confidence": "High", "addressas": "Paul F Smedberg and Catherine L Smedberg", "salute": "Dear Paul and Catherine", "dnc": "", "research": "No", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "sheet": "Main", "verified_name": "", "source": "Classifier"}, {"mapid": "13", "owner": "JANET S SMITH", "owner2": "", "site": "1122 PINE LAKE DRIVE", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "1108 PINE LAKE DR", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Residential", "ownertype": "Person", "occupied": "No", "confidence": "Medium", "addressas": "Current Resident", "salute": "Dear Neighbor", "dnc": "", "research": "Yes", "notes": "Owner mail (1108 Pine Lake Dr) does not match \u2014 likely rental", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "18", "owner": "VTAE DISTRICT 10", "owner2": "", "site": "231 N NATIONAL AVENUE", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "235 N NATIONAL AVE", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Residential", "ownertype": "Person", "occupied": "No", "confidence": "Medium", "addressas": "Current Resident", "salute": "Dear Neighbor", "dnc": "", "research": "Yes", "notes": "Owner mail (235 N National Ave) does not match \u2014 likely rental", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "19", "owner": "Owner or Manager", "owner2": "", "site": "270 N PRAIRIE ROAD", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "PO BOX 1006", "city": "Fond du Lac", "state": "WI", "zip": "54936", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "High", "addressas": "Owner or Manager", "salute": "Dear Owner or Manager", "dnc": "", "research": "Yes", "notes": "Property owner: C D Smith Construction Inc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "20", "owner": "Current Resident", "owner2": "", "site": "325 CAMPUS DRIVE", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "CITY COUNTY GOV CENTER", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Apartment", "ownertype": "Business / Rental", "occupied": "No", "confidence": "High", "addressas": "Fond Du Lac County", "salute": "Dear Resident", "dnc": "", "research": "Yes", "notes": "Known multi-unit building \u2014 run Melissa units script for individual unit mailing list \u2014 ADD INDIVIDUAL UNIT ROWS BELOW", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Multi_Occupant", "verified_name": "", "source": "Tax Record \u2014 resident unconfirmed"}, {"mapid": "21", "owner": "Owner or Manager", "owner2": "", "site": "243 N PRAIRIE ROAD", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "PO BOX 1006", "city": "Fond du Lac", "state": "WI", "zip": "54936", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "High", "addressas": "Owner or Manager", "salute": "Dear Owner or Manager", "dnc": "", "research": "Yes", "notes": "Property owner: C D Smith Construction Inc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "22", "owner": "MUMM REAL ESTATE LLC", "owner2": "", "site": "44 KAIRIS COURT", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "PO BOX 2221", "city": "Fond du Lac", "state": "WI", "zip": "54936", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "Medium", "addressas": "Mumm Real Estate Llc", "salute": "Dear Resident or Business Owner", "dnc": "", "research": "Yes", "notes": "Business-owned \u2014 could be rental residential or commercial", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "23", "owner": "BRENDA J LEHMAN", "owner2": "PAUL E LEHMAN", "site": "48 KAIRIS COURT", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "48 KAIRIS CT", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Residential", "ownertype": "Person", "occupied": "Yes", "confidence": "High", "addressas": "Brenda J Lehman and Paul E Lehman", "salute": "Dear Brenda and Paul", "dnc": "", "research": "No", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "sheet": "Main", "verified_name": "", "source": "Classifier"}, {"mapid": "24", "owner": "KURT PIEPER", "owner2": "KIM PIEPER", "site": "53 KAIRIS COURT", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "53 KAIRIS CT", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Residential", "ownertype": "Person", "occupied": "Yes", "confidence": "High", "addressas": "Kurt Pieper and Kim Pieper", "salute": "Dear Kurt and Kim", "dnc": "", "research": "No", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "sheet": "Main", "verified_name": "", "source": "Classifier"}, {"mapid": "28", "owner": "Owner or Manager", "owner2": "", "site": "1097 E JOHNSON STREET", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "300 N MAIN ST STE 300", "city": "Oshkosh", "state": "WI", "zip": "54901", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "High", "addressas": "Owner or Manager", "salute": "Dear Owner or Manager", "dnc": "", "research": "Yes", "notes": "Property owner: 1125 East Johnson Llc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "29", "owner": "Owner or Manager", "owner2": "", "site": "240 N PRAIRIE ROAD", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "PO BOX 1006", "city": "Fond du Lac", "state": "WI", "zip": "54936", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "High", "addressas": "Owner or Manager", "salute": "Dear Owner or Manager", "dnc": "", "research": "Yes", "notes": "Property owner: C D Smith Construction Inc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "30", "owner": "LAURA SCHULTZ", "owner2": "", "site": "68 KAIRIS COURT", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "68 KAIRIS CT", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Residential", "ownertype": "Person", "occupied": "Yes", "confidence": "High", "addressas": "Laura Schultz", "salute": "Dear Laura", "dnc": "", "research": "No", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "sheet": "Main", "verified_name": "", "source": "Classifier"}, {"mapid": "31", "owner": "RONALD E NELSON", "owner2": "PENELOPE S HATHAWAY", "site": "64 KAIRIS COURT", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "64 KAIRIS CT", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Residential", "ownertype": "Person", "occupied": "Yes", "confidence": "High", "addressas": "Ronald E Nelson and Penelope S Hathaway", "salute": "Dear Ronald and Penelope", "dnc": "", "research": "No", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "sheet": "Main", "verified_name": "", "source": "Classifier"}, {"mapid": "32", "owner": "DRENDEL PROPERTIES LLC", "owner2": "", "site": "33 KAIRIS COURT", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "3452 COUNTY ROAD Z", "city": "Oshkosh", "state": "WI", "zip": "54902", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "Medium", "addressas": "Drendel Properties Llc", "salute": "Dear Resident or Business Owner", "dnc": "", "research": "Yes", "notes": "Business-owned \u2014 could be rental residential or commercial", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "33", "owner": "KATHRYN A PAPE", "owner2": "", "site": "29 KAIRIS COURT", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "29 KAIRIS CT", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Residential", "ownertype": "Person", "occupied": "Yes", "confidence": "High", "addressas": "Kathryn A Pape", "salute": "Dear Kathryn", "dnc": "", "research": "No", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "sheet": "Main", "verified_name": "", "source": "Classifier"}, {"mapid": "34", "owner": "JOHN E BOSTWICK", "owner2": "DIANE M BOSTWICK", "site": "30 KAIRIS COURT", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "30 KAIRIS CT", "city": "Fond du Lac", "state": "WI", "zip": "54935", "btype": "Residential", "ownertype": "Person", "occupied": "Yes", "confidence": "High", "addressas": "John E Bostwick and Diane M Bostwick", "salute": "Dear John and Diane", "dnc": "", "research": "No", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "sheet": "Main", "verified_name": "", "source": "Classifier"}, {"mapid": "35", "owner": "Owner or Manager, C.D. Smith Construction", "owner2": "", "site": "889 E JOHNSON STREET", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "PO BOX 1006", "city": "Fond du Lac", "state": "WI", "zip": "54936", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "High", "addressas": "Owner or Manager, C.D. Smith Construction", "salute": "Dear Owner or Manager", "dnc": "", "research": "Maybe", "notes": "Property owner: C D Smith Construction Inc | Owner has multiple parcels \u2014 each address treated as mailing opportunity", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "36", "owner": "Owner or Manager, Korneli's", "owner2": "", "site": "919 E JOHNSON STREET", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "N6383 TRADEWINDS CIR", "city": "Beaver Dam", "state": "WI", "zip": "53916", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "High", "addressas": "Owner or Manager, Korneli's", "salute": "Dear Owner or Manager", "dnc": "", "research": "No", "notes": "Property owner: Station 23 Llc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "37", "owner": "Owner or Manager, McDonald's", "owner2": "", "site": "929 E JOHNSON STREET", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "% VALLEY MANAGEMENT", "city": "Neenah", "state": "WI", "zip": "54956", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "High", "addressas": "Owner or Manager, McDonald's", "salute": "Dear Owner or Manager", "dnc": "", "research": "No", "notes": "Property owner: Mcdonalds Corporation", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "38", "owner": "Owner or Manager, Culver's", "owner2": "", "site": "969 E JOHNSON STREET", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "2651 KIRKING CT", "city": "Portage", "state": "WI", "zip": "53901", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "High", "addressas": "Owner or Manager, Culver's", "salute": "Dear Owner or Manager", "dnc": "", "research": "No", "notes": "Property owner: S & L Properties Fond Du Lac Llc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "39", "owner": "Owner or Manager, Verve, a Credit Union", "owner2": "", "site": "1045 E JOHNSON STREET", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "PO BOX 3046", "city": "Oshkosh", "state": "WI", "zip": "54903", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "High", "addressas": "Owner or Manager, Verve, a Credit Union", "salute": "Dear Owner or Manager", "dnc": "", "research": "No", "notes": "Property owner: Citizensfirst Credit Union", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "40", "owner": "Owner or Manager, Kwik Trip", "owner2": "", "site": "1061 E JOHNSON STREET", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "1626 OAK ST", "city": "Lacrosse", "state": "WI", "zip": "54603", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "High", "addressas": "Owner or Manager, Kwik Trip", "salute": "Dear Owner or Manager", "dnc": "", "research": "No", "notes": "Property owner: Convenience Store Investments", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "41", "owner": "Owner or Manager", "owner2": "", "site": "1073 E JOHNSON STREET", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "300 N MAIN ST STE 300", "city": "Oshkosh", "state": "WI", "zip": "54901", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "High", "addressas": "Owner or Manager", "salute": "Dear Owner or Manager", "dnc": "", "research": "Yes", "notes": "Property owner: 1071 East Johnson Llc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}, {"mapid": "43", "owner": "Owner or Manager", "owner2": "", "site": "949 E JOHNSON STREET", "site_city": "Fond du Lac", "site_state": "WI", "site_zip": "54935", "mail": "6623 LONGHORN LN", "city": "Sun Prairie", "state": "WI", "zip": "53590", "btype": "Commercial / Rental", "ownertype": "Business", "occupied": "No", "confidence": "High", "addressas": "Owner or Manager", "salute": "Dear Owner or Manager", "dnc": "", "research": "Yes", "notes": "Property owner: Pelletier Enterprises Llc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "sheet": "Main", "verified_name": "", "source": "Tax Record"}];
+// 2026-11-24 (v5.38): map opened from a folder (double-clicked in File
+// Explorer) -- background maps can't load that way, so show a bar with a
+// button that opens this territory's online copy on GitHub Pages.
+if (_openedAsFile) {
+  (function _fileOpenBar() {
+    var url = (typeof _PAGES_BASE !== 'undefined' && typeof _TERRITORY !== 'undefined')
+      ? _PAGES_BASE + '/' + _TERRITORY + '/' : null;
+    var bar = document.createElement('div');
+    bar.id = '_fileOpenBar';
+    bar.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:10000;'
+      + 'background:#FFF4CE;border:1px solid #D9A400;border-radius:6px;padding:8px 12px;'
+      + 'font:14px Arial,sans-serif;color:#333;box-shadow:0 2px 8px rgba(0,0,0,0.25);'
+      + 'display:flex;align-items:center;gap:10px;';
+    var msg = document.createElement('span');
+    msg.textContent = "Background map can’t load when opened from a folder.";
+    bar.appendChild(msg);
+    if (url) {
+      var b = document.createElement('button');
+      b.textContent = 'Open online version';
+      b.style.cssText = 'background:#1A3A6B;color:#fff;border:none;border-radius:4px;padding:6px 12px;font:bold 13px Arial,sans-serif;cursor:pointer;';
+      b.onclick = function() { window.open(url, '_blank'); };
+      bar.appendChild(b);
+    }
+    var x = document.createElement('span');
+    x.textContent = '✕';
+    x.title = 'Close';
+    x.style.cssText = 'cursor:pointer;color:#777;padding:0 2px;';
+    x.onclick = function() { bar.remove(); };
+    bar.appendChild(x);
+    document.body.appendChild(bar);
+  })();
+}
+
+if (boundaryData) {
+  var boundary = L.geoJSON(boundaryData, {
+    style: {
+      color: '#7B2D8B', weight: 3, opacity: 1,
+      fillColor: '#7B2D8B', fillOpacity: 0.04,
+      dashArray: '8,5'
+    }
+  }).addTo(map);
+  map.fitBounds(boundary.getBounds(), {padding: [30, 30]});
+  // Territory name label — centered on the true shape of the boundary
+  // (steered away from any segregated child territory's area, if this
+  // territory has any), not just the center of its bounding rectangle.
+  // Falls back to the old rectangle-center behavior if that wasn't
+  // computed for some reason.
+  var center = (TERRITORY_LABEL_LAT !== null && TERRITORY_LABEL_LNG !== null)
+    ? L.latLng(TERRITORY_LABEL_LAT, TERRITORY_LABEL_LNG)
+    : boundary.getBounds().getCenter();
+  L.marker(center, {
+    icon: L.divIcon({
+      className: '',
+      html: '<div style="display:inline-block;font-size:52px;font-weight:900;'
+           +'color:#1A3A6B;opacity:0.55;'
+           +'white-space:nowrap;pointer-events:none;'
+           +'position:relative;z-index:9999;'
+           +'text-shadow:2px 2px 0px white,-2px -2px 0px white,2px -2px 0px white,-2px 2px 0px white;'
+           +'transform:translate(-50%,-50%);">Business_9</div>',
+      iconSize: [0, 0],
+      iconAnchor: [0, 0]
+    }),
+    interactive: false
+  }).addTo(map);
+}
+
+var parcelsData = {"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"coordinates": [[[[-88.40802357544918, 43.787234983149354], [-88.4080181419338, 43.78671543732461], [-88.40823839095627, 43.7867178652627], [-88.4082434951809, 43.78723306262555], [-88.40802357544918, 43.787234983149354]]], [[[-88.40822492269731, 43.78497880166667], [-88.4082260072518, 43.78515985086265], [-88.40822566832786, 43.78543417121453], [-88.4082277077131, 43.785639905436426], [-88.4082283997306, 43.78570969911725], [-88.40823675945727, 43.78655323615714], [-88.40801642035248, 43.78655080724338], [-88.40800758044291, 43.78570567050247], [-88.4080047025255, 43.78543075537579], [-88.40799475517647, 43.78448089636765], [-88.40822193998845, 43.784481055622734], [-88.40822492269731, 43.78497880166667]]]], "type": "MultiPolygon"}, "properties": {"mapid": 17, "owner": "Unknown Owner", "site": "Fond du Lac WI 54935", "mail": "", "sheet": "Vacant", "occupied": "No", "btype": "Vacant / No Value", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "No land or improvement value \u2014 likely vacant parcel", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "", "state": "", "zip": "", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.41002122331527, 43.784369548079745], [-88.41002136301793, 43.78425155828772], [-88.41003244438856, 43.78393070376515], [-88.41050558162688, 43.78393927961336], [-88.4105071353517, 43.78437835537723], [-88.41039357839074, 43.78437629720679], [-88.41002122331527, 43.784369548079745]]]], "type": "MultiPolygon"}, "properties": {"mapid": 43, "owner": "Owner or Manager", "site": "949 E JOHNSON STREET, Fond du Lac WI 54935", "mail": "6623 LONGHORN LN", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "Yes", "salute": "Dear Owner or Manager", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "High", "addressas": "Owner or Manager", "notes": "Property owner: Pelletier Enterprises Llc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Sun Prairie", "state": "WI", "zip": "53590", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40873162159045, 43.784232190069865], [-88.40822406286757, 43.78422293034422], [-88.40822069451946, 43.78389770479599], [-88.4097820331694, 43.78392616388095], [-88.40977253928997, 43.7842511605292], [-88.40977362860235, 43.784525479357484], [-88.40884624838466, 43.784508567813674], [-88.40873162159045, 43.784232190069865]]]], "type": "MultiPolygon"}, "properties": {"mapid": 38, "owner": "Owner or Manager, Culver's", "site": "969 E JOHNSON STREET, Fond du Lac WI 54935", "mail": "2651 KIRKING CT", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "No", "salute": "Dear Owner or Manager", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "High", "addressas": "Owner or Manager, Culver's", "notes": "Property owner: S & L Properties Fond Du Lac Llc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Portage", "state": "WI", "zip": "53901", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.41123612658386, 43.78395251769904], [-88.41185470195178, 43.78396372351895], [-88.41185991632825, 43.78458220433199], [-88.4112391942235, 43.78457095547396], [-88.41123612658386, 43.78395251769904]]]], "type": "MultiPolygon"}, "properties": {"mapid": 36, "owner": "Owner or Manager, Korneli's", "site": "919 E JOHNSON STREET, Fond du Lac WI 54935", "mail": "N6383 TRADEWINDS CIR", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "No", "salute": "Dear Owner or Manager", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "High", "addressas": "Owner or Manager, Korneli's", "notes": "Property owner: Station 23 Llc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Beaver Dam", "state": "WI", "zip": "53916", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.41210960511775, 43.78455611213457], [-88.41210464224606, 43.78396770590032], [-88.41297952369123, 43.78398029765057], [-88.41298441878914, 43.784568245694985], [-88.41298411319755, 43.78456824186231], [-88.41210960511775, 43.78455611213457]]]], "type": "MultiPolygon"}, "properties": {"mapid": 35, "owner": "Owner or Manager, C.D. Smith Construction", "site": "889 E JOHNSON STREET, Fond du Lac WI 54935", "mail": "PO BOX 1006", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "Maybe", "salute": "Dear Owner or Manager", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "High", "addressas": "Owner or Manager, C.D. Smith Construction", "notes": "Property owner: C D Smith Construction Inc | Owner has multiple parcels \u2014 each address treated as mailing opportunity", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Fond du Lac", "state": "WI", "zip": "54936", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40194417573382, 43.78381188751058], [-88.40179731856134, 43.784086434010156], [-88.40179371336045, 43.78382853161336], [-88.40194417573382, 43.78381188751058]]]], "type": "MultiPolygon"}, "properties": {"mapid": 45, "owner": "WISCONSIN DEPT OF TRANSPORTATION", "site": "Fond du Lac WI 54937", "mail": "944 VANDERPERRN WAY", "sheet": "Vacant", "occupied": "No", "btype": "Vacant / No Value", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "No land or improvement value \u2014 likely vacant parcel", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Greenbay", "state": "WI", "zip": "54304", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40194376393772, 43.7837826209793], [-88.40194376533738, 43.78378252468054], [-88.40259052521702, 43.78379440871635], [-88.40259052508259, 43.78379449151616], [-88.40258941049456, 43.78448092181052], [-88.40195357646789, 43.78448037813261], [-88.40194417573382, 43.78381188751058], [-88.40194376393772, 43.7837826209793]]]], "type": "MultiPolygon"}, "properties": {"mapid": 44, "owner": "1163 EAST JOHNSON LLC", "site": "0 E JOHNSON STREET, Fond du Lac WI 54935", "mail": "300 N MAIN ST STE 300", "sheet": "Duplicates", "occupied": "No", "btype": "Vacant Land", "research": "No", "salute": "", "dnc": "", "fill": "#FFFF00", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "Land value only \u2014 vacant lot", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Oshkosh", "state": "WI", "zip": "54901", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40180328802454, 43.78451344648072], [-88.40179731856134, 43.784086434010156], [-88.40194417573382, 43.78381188751058], [-88.40195357646789, 43.78448037813261], [-88.40195407831726, 43.784516117531865], [-88.4018031766622, 43.784514694683956], [-88.40180328802454, 43.78451344648072]]]], "type": "MultiPolygon"}, "properties": {"mapid": 42, "owner": "WIS POWER & LIGHT CO", "site": "1167 E JOHNSON STREET, Fond du Lac WI 54937", "mail": "REAL ESTATE DEPT", "sheet": "Vacant", "occupied": "No", "btype": "Vacant / No Value", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "No land or improvement value \u2014 likely vacant parcel", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Madison", "state": "WI", "zip": "53718", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40681571519536, 43.78387195386697], [-88.40681582326822, 43.7838719557551], [-88.40822069451946, 43.78389770479599], [-88.40822406286757, 43.78422293034422], [-88.40822435652052, 43.784481651562686], [-88.40822317761437, 43.784481650616044], [-88.40799477790435, 43.78448146698545], [-88.40679584033509, 43.78448049556774], [-88.40681498395763, 43.78434271499476], [-88.40681571519536, 43.78387195386697]]]], "type": "MultiPolygon"}, "properties": {"mapid": 39, "owner": "Owner or Manager, Verve, a Credit Union", "site": "1045 E JOHNSON STREET, Fond du Lac WI 54935", "mail": "PO BOX 3046", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "No", "salute": "Dear Owner or Manager", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "High", "addressas": "Owner or Manager, Verve, a Credit Union", "notes": "Property owner: Citizensfirst Credit Union", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Oshkosh", "state": "WI", "zip": "54903", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40472366428483, 43.78383403829321], [-88.40472366501665, 43.78383357749418], [-88.40496524944903, 43.78383801132209], [-88.40546106291944, 43.78384710930553], [-88.4054610628783, 43.78384713540548], [-88.40546106136782, 43.78384809390349], [-88.40545987336198, 43.78460195210177], [-88.4047224540292, 43.78460076465501], [-88.40472366428483, 43.78383403829321]]]], "type": "MultiPolygon"}, "properties": {"mapid": 41, "owner": "Owner or Manager", "site": "1073 E JOHNSON STREET, Fond du Lac WI 54935", "mail": "300 N MAIN ST STE 300", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "Yes", "salute": "Dear Owner or Manager", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "High", "addressas": "Owner or Manager", "notes": "Property owner: 1071 East Johnson Llc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Oshkosh", "state": "WI", "zip": "54901", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.4054610628783, 43.78384713540548], [-88.40546106291944, 43.78384710930553], [-88.40646737951285, 43.783865567341806], [-88.40646623010497, 43.78460278009556], [-88.40545987336198, 43.78460195210177], [-88.40546106136782, 43.78384809390349], [-88.4054610628783, 43.78384713540548]]]], "type": "MultiPolygon"}, "properties": {"mapid": 40, "owner": "Owner or Manager, Kwik Trip", "site": "1061 E JOHNSON STREET, Fond du Lac WI 54935", "mail": "1626 OAK ST", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "No", "salute": "Dear Owner or Manager", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "High", "addressas": "Owner or Manager, Kwik Trip", "notes": "Property owner: Convenience Store Investments", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Lacrosse", "state": "WI", "zip": "54603", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.4057286578976, 43.78566407137418], [-88.40521764402303, 43.78565473694909], [-88.40470662906776, 43.78564540113829], [-88.40419266268914, 43.78563600836877], [-88.40258353524776, 43.78560658621257], [-88.40196924925249, 43.78559534829654], [-88.40195407831726, 43.784516117531865], [-88.40195357646789, 43.78448037813261], [-88.40258941049456, 43.78448092181052], [-88.40259052508259, 43.78379449151616], [-88.40259052521702, 43.78379440871635], [-88.40472366501665, 43.78383357749418], [-88.40472366428483, 43.78383403829321], [-88.4047224540292, 43.78460076465501], [-88.40545987336198, 43.78460195210177], [-88.40646623010497, 43.78460278009556], [-88.40646612035475, 43.78467317074292], [-88.40647011113366, 43.78477255721864], [-88.40648237798122, 43.784871587771086], [-88.4065028761731, 43.784969901010086], [-88.40653153094554, 43.785067138161395], [-88.40656823776763, 43.785162944376076], [-88.40661286272214, 43.78525697002541], [-88.40666524299384, 43.78534887197693], [-88.4066969983384, 43.785406790711775], [-88.40672165368228, 43.78546649661993], [-88.40673902076598, 43.785527533860034], [-88.40674896697287, 43.78558943642492], [-88.40675141634237, 43.7856517316994], [-88.4067507643981, 43.78568273433423], [-88.40675075901763, 43.78568299892956], [-88.4062243482996, 43.7856734143429], [-88.4057286578976, 43.78566407137418]]]], "type": "MultiPolygon"}, "properties": {"mapid": 28, "owner": "Owner or Manager", "site": "1097 E JOHNSON STREET, Fond du Lac WI 54935", "mail": "300 N MAIN ST STE 300", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "Yes", "salute": "Dear Owner or Manager", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "High", "addressas": "Owner or Manager", "notes": "Property owner: 1125 East Johnson Llc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Oshkosh", "state": "WI", "zip": "54901", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.41039357839074, 43.78437629720679], [-88.4105071353517, 43.78437835537723], [-88.41050558162688, 43.78393927961336], [-88.41123612658386, 43.78395251769904], [-88.4112391942235, 43.78457095547396], [-88.4111275300331, 43.784568931902655], [-88.41112742657891, 43.784556587433016], [-88.410843381743, 43.78455143871727], [-88.41084511313548, 43.78475728518465], [-88.41039671099259, 43.78474915583666], [-88.41039357839074, 43.78437629720679]]]], "type": "MultiPolygon"}, "properties": {"mapid": 37, "owner": "Owner or Manager, McDonald's", "site": "929 E JOHNSON STREET, Fond du Lac WI 54935", "mail": "% VALLEY MANAGEMENT", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "No", "salute": "Dear Owner or Manager", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "High", "addressas": "Owner or Manager, McDonald's", "notes": "Property owner: Mcdonalds Corporation", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Neenah", "state": "WI", "zip": "54956", "verified_name": ""}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.40945581175096, 43.78471373907465], [-88.40934275742467, 43.78451762206588], [-88.40977362860235, 43.784525479357484], [-88.40977231495833, 43.7847031550228], [-88.40945581175096, 43.78471373907465]]]}, "properties": {"mapid": 33, "owner": "KATHRYN A PAPE", "site": "29 KAIRIS COURT, Fond du Lac WI 54935", "mail": "29 KAIRIS CT", "sheet": "Main", "occupied": "Yes", "btype": "Residential", "research": "No", "salute": "Dear Kathryn", "dnc": "", "fill": "#2E5496", "owner2": "", "ownertype": "Person", "confidence": "High", "addressas": "Kathryn A Pape", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.40908544846059, 43.7849944108676], [-88.40884918260744, 43.78499012641601], [-88.40822529164238, 43.7849788082629], [-88.40822492269731, 43.78497880166667], [-88.4082247872134, 43.78486029686922], [-88.40822435652052, 43.784481651562686], [-88.40822406286757, 43.78422293034422], [-88.40873162159045, 43.784232190069865], [-88.40884624838466, 43.784508567813674], [-88.40908583144652, 43.78451293680858], [-88.40908544846059, 43.7849944108676]]]}, "properties": {"mapid": 30, "owner": "LAURA SCHULTZ", "site": "68 KAIRIS COURT, Fond du Lac WI 54935", "mail": "68 KAIRIS CT", "sheet": "Main", "occupied": "Yes", "btype": "Residential", "research": "No", "salute": "Dear Laura", "dnc": "", "fill": "#2E5496", "owner2": "", "ownertype": "Person", "confidence": "High", "addressas": "Laura Schultz", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.40908583144652, 43.78451293680858], [-88.40934275742467, 43.78451762206588], [-88.40945581175096, 43.78471373907465], [-88.4095394870279, 43.78500264441567], [-88.40908544846059, 43.7849944108676], [-88.40908583144652, 43.78451293680858]]]}, "properties": {"mapid": 31, "owner": "RONALD E NELSON & PENELOPE S HATHAWAY", "site": "64 KAIRIS COURT, Fond du Lac WI 54935", "mail": "64 KAIRIS CT", "sheet": "Main", "occupied": "Yes", "btype": "Residential", "research": "No", "salute": "Dear Ronald and Penelope", "dnc": "", "fill": "#2E5496", "owner2": "PENELOPE S HATHAWAY", "ownertype": "Person", "confidence": "High", "addressas": "Ronald E Nelson and Penelope S Hathaway", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[-88.40945581175096, 43.78471373907465], [-88.40977231495833, 43.7847031550228], [-88.40977006977009, 43.78500682580956], [-88.4095394870279, 43.78500264441567], [-88.40945581175096, 43.78471373907465]]]}, "properties": {"mapid": 32, "owner": "DRENDEL PROPERTIES LLC", "site": "33 KAIRIS COURT, Fond du Lac WI 54935", "mail": "3452 COUNTY ROAD Z", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "Yes", "salute": "Dear Resident or Business Owner", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "Medium", "addressas": "Drendel Properties Llc", "notes": "Business-owned \u2014 could be rental residential or commercial", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Oshkosh", "state": "WI", "zip": "54902", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.41002122331527, 43.784369548079745], [-88.41039357839074, 43.78437629720679], [-88.41039671099259, 43.78474915583666], [-88.41039818880414, 43.78492497453303], [-88.4100205619907, 43.78491812947136], [-88.41002122331527, 43.784369548079745]]]], "type": "MultiPolygon"}, "properties": {"mapid": 34, "owner": "JOHN E BOSTWICK & DIANE M BOSTWICK", "site": "30 KAIRIS COURT, Fond du Lac WI 54935", "mail": "30 KAIRIS CT", "sheet": "Main", "occupied": "Yes", "btype": "Residential", "research": "No", "salute": "Dear John and Diane", "dnc": "", "fill": "#2E5496", "owner2": "DIANE M BOSTWICK", "ownertype": "Person", "confidence": "High", "addressas": "John E Bostwick and Diane M Bostwick", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.41210960511775, 43.78455611213457], [-88.41298411319755, 43.78456824186231], [-88.41298441878914, 43.784568245694985], [-88.41298906326337, 43.78512605881698], [-88.41211443262698, 43.78512843611941], [-88.41211059046726, 43.78467296608929], [-88.41210960511775, 43.78455611213457]]]], "type": "MultiPolygon"}, "properties": {"mapid": 29, "owner": "Owner or Manager", "site": "240 N PRAIRIE ROAD, Fond du Lac WI 54935", "mail": "PO BOX 1006", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "Yes", "salute": "Dear Owner or Manager", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "High", "addressas": "Owner or Manager", "notes": "Property owner: C D Smith Construction Inc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Fond du Lac", "state": "WI", "zip": "54936", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.41002023136537, 43.785192390447406], [-88.4100205619907, 43.78491812947136], [-88.41039818880414, 43.78492497453303], [-88.41039910864366, 43.78503438815047], [-88.41039843030181, 43.785473571881354], [-88.41001990064585, 43.78546671081011], [-88.41002023136537, 43.785192390447406]]]], "type": "MultiPolygon"}, "properties": {"mapid": 22, "owner": "MUMM REAL ESTATE LLC", "site": "44 KAIRIS COURT, Fond du Lac WI 54935", "mail": "PO BOX 2221", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "Yes", "salute": "Dear Resident or Business Owner", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "Medium", "addressas": "Mumm Real Estate Llc", "notes": "Business-owned \u2014 could be rental residential or commercial", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Fond du Lac", "state": "WI", "zip": "54936", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.41002023136537, 43.785192390447406], [-88.4100205619907, 43.78491812947136], [-88.41039818880414, 43.78492497453303], [-88.4103964886778, 43.78503439419649], [-88.41039843030181, 43.785473571881354], [-88.41001990064585, 43.78546671081011], [-88.41002023136537, 43.785192390447406]]]], "type": "MultiPolygon"}, "properties": {"mapid": 23, "owner": "BRENDA J LEHMAN & PAUL E LEHMAN", "site": "48 KAIRIS COURT, Fond du Lac WI 54935", "mail": "48 KAIRIS CT", "sheet": "Main", "occupied": "Yes", "btype": "Residential", "research": "No", "salute": "Dear Brenda and Paul", "dnc": "", "fill": "#2E5496", "owner2": "PAUL E LEHMAN", "ownertype": "Person", "confidence": "High", "addressas": "Brenda J Lehman and Paul E Lehman", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.4082277077131, 43.785639905436426], [-88.40822566832786, 43.78543417121453], [-88.40822722859174, 43.785434199467325], [-88.40926284035892, 43.7854529840059], [-88.41001990064585, 43.78546671081011], [-88.41039843030181, 43.785473571881354], [-88.41039910864366, 43.78503438815047], [-88.41039818880414, 43.78492497453303], [-88.41039671099259, 43.78474915583666], [-88.41084511313548, 43.78475728518465], [-88.4111291589462, 43.784762433896724], [-88.41112905424914, 43.78475008942654], [-88.41186145393533, 43.78476336275615], [-88.41186395221963, 43.78506093950478], [-88.41186938797473, 43.78570557974092], [-88.40822810274885, 43.78563991295362], [-88.4082277077131, 43.785639905436426]]]], "type": "MultiPolygon"}, "properties": {"mapid": 21, "owner": "Owner or Manager", "site": "243 N PRAIRIE ROAD, Fond du Lac WI 54935", "mail": "PO BOX 1006", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "Yes", "salute": "Dear Owner or Manager", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "High", "addressas": "Owner or Manager", "notes": "Property owner: C D Smith Construction Inc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Fond du Lac", "state": "WI", "zip": "54936", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.4068892979216, 43.78516591437228], [-88.40684616555002, 43.78507036518005], [-88.40681242930636, 43.78497285241379], [-88.40678825670281, 43.78487386039177], [-88.40677376774977, 43.78477388077694], [-88.40676903436048, 43.78467341013487], [-88.40679584033509, 43.78448049556774], [-88.40799477790435, 43.78448146698545], [-88.40800469006267, 43.78543078146575], [-88.40751666264359, 43.78543346020669], [-88.40704068444182, 43.78550484989315], [-88.40702474753675, 43.78544168415888], [-88.40700284936686, 43.78537946253666], [-88.40697509374306, 43.78531847994343], [-88.40694161223813, 43.78525902542252], [-88.4068892979216, 43.78516591437228]]]], "type": "MultiPolygon"}, "properties": {"mapid": 27, "owner": "254 N COUNTRY LANE LLC", "site": "244 N COUNTRY LANE, Fond du Lac WI 54935", "mail": "300 N MAIN ST STE 300", "sheet": "Vacant", "occupied": "No", "btype": "Vacant Land", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "Land value only \u2014 vacant lot", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Oshkosh", "state": "WI", "zip": "54901", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40705360325616, 43.78568826220535], [-88.40705430066886, 43.785655073508124], [-88.4070516831132, 43.785579762343836], [-88.40704068444182, 43.78550484989315], [-88.40751666264359, 43.78543346020669], [-88.40800469006267, 43.78543078146575], [-88.40800758044291, 43.78570567050247], [-88.40801642035248, 43.78655080724338], [-88.40703569503333, 43.786539989560225], [-88.40705360325616, 43.78568826220535]]]], "type": "MultiPolygon"}, "properties": {"mapid": 15, "owner": "1125 EAST JOHNSON LLC", "site": "1038 PINE LAKE DRIVE, Fond du Lac WI 54935", "mail": "300 N MAIN ST STE 300", "sheet": "Vacant", "occupied": "No", "btype": "Vacant Land", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "Land value only \u2014 vacant lot", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Oshkosh", "state": "WI", "zip": "54901", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40381907660107, 43.78654755374821], [-88.40345505139567, 43.78627032256668], [-88.40345501168991, 43.786270292833194], [-88.40258353524776, 43.78560658621257], [-88.40419266268914, 43.78563600836877], [-88.40419035444198, 43.785745728915295], [-88.40418397529416, 43.78604905022897], [-88.40417270646196, 43.78658483984368], [-88.40415151094003, 43.78656256957229], [-88.40412556648073, 43.786543115224845], [-88.40409557389347, 43.78652700229725], [-88.40406234333257, 43.78651466602749], [-88.4040267724138, 43.78650643963922], [-88.4039898219685, 43.78650254534108], [-88.4039524900905, 43.78650308832463], [-88.4039157851765, 43.78650805392294], [-88.40388069868821, 43.78651730800685], [-88.40384817837203, 43.78653060060788], [-88.40381910265917, 43.786547572670116], [-88.40381907660107, 43.78654755374821]]]], "type": "MultiPolygon"}, "properties": {"mapid": 16, "owner": "JANET S SMITH", "site": "1132 PINE LAKE DRIVE, Fond du Lac WI 54935", "mail": "1108 PINE LAKE DR", "sheet": "Vacant", "occupied": "No", "btype": "Vacant Land", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "Land value only \u2014 vacant lot", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40468682253234, 43.786585668437446], [-88.40417270646196, 43.78658483984368], [-88.40418397529416, 43.78604905022897], [-88.40419035444198, 43.785745728915295], [-88.40419266268914, 43.78563600836877], [-88.40470662906776, 43.78564540113829], [-88.40521764402303, 43.78565473694909], [-88.40521533392294, 43.785764457514574], [-88.40572484063499, 43.78577376460675], [-88.40572634872895, 43.78577379375065], [-88.4057193379057, 43.78610693249384], [-88.40570936805354, 43.7865806108042], [-88.40555899904746, 43.786587070144904], [-88.40519802541864, 43.78658649050227], [-88.40468682253234, 43.786585668437446]]]], "type": "MultiPolygon"}, "properties": {"mapid": 13, "owner": "JANET S SMITH", "site": "1122 PINE LAKE DRIVE, Fond du Lac WI 54935", "mail": "1108 PINE LAKE DR", "sheet": "Main", "occupied": "No", "btype": "Residential", "research": "Yes", "salute": "Dear Neighbor", "dnc": "", "fill": "#FFFF00", "owner2": "", "ownertype": "Person", "confidence": "Medium", "addressas": "Current Resident", "notes": "Owner mail (1108 Pine Lake Dr) does not match \u2014 likely rental", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40572634872895, 43.78577379375065], [-88.40572484063499, 43.78577376460675], [-88.40521533392294, 43.785764457514574], [-88.40521764402303, 43.78565473694909], [-88.4057286578976, 43.78566407137418], [-88.4062243482996, 43.7856734143429], [-88.40675075901763, 43.78568299892956], [-88.40675071752125, 43.78568491949364], [-88.40674212410318, 43.7860935858278], [-88.40673280996819, 43.7865366468018], [-88.40620579351717, 43.78655928789669], [-88.4062055475254, 43.786559297594806], [-88.40595888596036, 43.786569893093976], [-88.40570936805354, 43.7865806108042], [-88.4057193379057, 43.78610693249384], [-88.40572634872895, 43.78577379375065]]]], "type": "MultiPolygon"}, "properties": {"mapid": 12, "owner": "PAUL F SMEDBERG & CATHERINE L SMEDBERG", "site": "1066 PINE LAKE DRIVE, Fond du Lac WI 54935", "mail": "1066 PINE LAKE DR", "sheet": "Main", "occupied": "Yes", "btype": "Residential", "research": "No", "salute": "Dear Paul and Catherine", "dnc": "", "fill": "#2E5496", "owner2": "CATHERINE L SMEDBERG", "ownertype": "Person", "confidence": "High", "addressas": "Paul F Smedberg and Catherine L Smedberg", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40277524443201, 43.78728081598362], [-88.40231386447857, 43.787272053322575], [-88.40199274446071, 43.78726595361965], [-88.40199120075772, 43.787156157844144], [-88.4019890237068, 43.787001363382664], [-88.40196924925249, 43.78559534829654], [-88.40258353524776, 43.78560658621257], [-88.40345501168991, 43.786270292833194], [-88.40345505139567, 43.78627032256668], [-88.40381907660107, 43.78654755374821], [-88.40381910265917, 43.786547572670116], [-88.40379422272729, 43.78656779863337], [-88.40377425972618, 43.78659070739717], [-88.40375975453534, 43.7866156782759], [-88.40375110016302, 43.78664203471272], [-88.40374853109746, 43.78666906260969], [-88.40375139075687, 43.786692949505806], [-88.40375901052649, 43.786716281955854], [-88.40377122871156, 43.786738564818556], [-88.4037877860329, 43.78675932522564], [-88.40380833112872, 43.786778122616575], [-88.40383672100643, 43.78679702565503], [-88.40386911125177, 43.786812182010756], [-88.40390404757433, 43.78682301047608], [-88.40393832339615, 43.786829167459025], [-88.40397350217867, 43.78683140209883], [-88.40400873400368, 43.786829660406646], [-88.40404316767143, 43.78682398446168], [-88.40407597126608, 43.78681451139457], [-88.40410635225524, 43.786801470074124], [-88.40413357663775, 43.786785175577904], [-88.40415459746218, 43.786768272655024], [-88.4041722000335, 43.78674943121305], [-88.40416275959318, 43.787197391412604], [-88.40416125670406, 43.78726871216042], [-88.40277524443201, 43.78728081598362]]]], "type": "MultiPolygon"}, "properties": {"mapid": 10, "owner": "JOSEPH ABHOLD & KATHRYN ABHOLD", "site": "1135 PINE LAKE DRIVE, Fond du Lac WI 54935", "mail": "1135 PINE LAKE DR", "sheet": "Main", "occupied": "Yes", "btype": "Residential", "research": "No", "salute": "Dear Joseph and Kathryn", "dnc": "", "fill": "#2E5496", "owner2": "KATHRYN ABHOLD", "ownertype": "Person", "confidence": "High", "addressas": "Joseph Abhold and Kathryn Abhold", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40619099311628, 43.78725098679738], [-88.40619131107576, 43.787235873538286], [-88.40620207438377, 43.78672432843912], [-88.40672934449147, 43.786701676769155], [-88.40671789141167, 43.78724585711345], [-88.40671788029829, 43.787246385576005], [-88.40619099311628, 43.78725098679738]]]], "type": "MultiPolygon"}, "properties": {"mapid": 4, "owner": "BASM LLC", "site": "1067 PINE LAKE DRIVE, Fond du Lac WI 54935", "mail": "889 E JOHNSON ST", "sheet": "Vacant", "occupied": "No", "btype": "Vacant Land", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "Land value only \u2014 vacant lot", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40416125670406, 43.78726871216042], [-88.40416275959318, 43.787197391412604], [-88.4041722000335, 43.78674943121305], [-88.40424793726571, 43.786749553188635], [-88.40468338566974, 43.78675025556535], [-88.40467376226363, 43.78720708874286], [-88.40467255829603, 43.7872642470455], [-88.40416125670406, 43.78726871216042]]]], "type": "MultiPolygon"}, "properties": {"mapid": 8, "owner": "JANET S SMITH", "site": "1121 PINE LAKE DRIVE, Fond du Lac WI 54935", "mail": "1108 PINE LAKE DR", "sheet": "Vacant", "occupied": "No", "btype": "Vacant Land", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "Land value only \u2014 vacant lot", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.4056951549065, 43.787255316873065], [-88.40569576190039, 43.7872264765445], [-88.40570588236473, 43.78674564162236], [-88.4057437877966, 43.786744014190774], [-88.40620207438377, 43.78672432843912], [-88.40619131107576, 43.787235873538286], [-88.40619099311628, 43.78725098679738], [-88.4056951549065, 43.787255316873065]]]], "type": "MultiPolygon"}, "properties": {"mapid": 5, "owner": "BASM LLC", "site": "1081 PINE LAKE DRIVE, Fond du Lac WI 54935", "mail": "889 E JOHNSON ST", "sheet": "Vacant", "occupied": "No", "btype": "Vacant Land", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "Land value only \u2014 vacant lot", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40467255829603, 43.7872642470455], [-88.40467376226363, 43.78720708874286], [-88.40468338566974, 43.78675025556535], [-88.40519457008165, 43.78675107763031], [-88.40518476386094, 43.78721678378748], [-88.40518385852522, 43.78725978194248], [-88.40467255829603, 43.7872642470455]]]], "type": "MultiPolygon"}, "properties": {"mapid": 7, "owner": "BASM LLC", "site": "1109 PINE LAKE DRIVE, Fond du Lac WI 54935", "mail": "952 STARBOARD CT", "sheet": "Vacant", "occupied": "No", "btype": "Vacant Land", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "Land value only \u2014 vacant lot", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Oshkosh", "state": "WI", "zip": "54901", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.41662621168533, 43.787159857704786], [-88.4160027852165, 43.7867652342831], [-88.4158790716503, 43.786689971332905], [-88.4157513580472, 43.786618300885905], [-88.41561984305636, 43.78655033441247], [-88.4154847312371, 43.78648617762178], [-88.41548378396332, 43.78648574852182], [-88.41546346178252, 43.7841103892621], [-88.41546440586133, 43.78411041426037], [-88.41775412572983, 43.784172167026306], [-88.42044658562655, 43.78420936087305], [-88.42167397095734, 43.78422629517971], [-88.42168022632667, 43.785380987622595], [-88.42168962305236, 43.78711563974421], [-88.41662621168533, 43.787159857704786]]]], "type": "MultiPolygon"}, "properties": {"mapid": 18, "owner": "VTAE DISTRICT 10", "site": "231 N NATIONAL AVENUE, Fond du Lac WI 54935", "mail": "235 N NATIONAL AVE", "sheet": "Main", "occupied": "No", "btype": "Residential", "research": "Yes", "salute": "Dear Neighbor", "dnc": "", "fill": "#FFFF00", "owner2": "", "ownertype": "Person", "confidence": "Medium", "addressas": "Current Resident", "notes": "Owner mail (235 N National Ave) does not match \u2014 likely rental", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40518385852522, 43.78725978194248], [-88.40518476386094, 43.78721678378748], [-88.40519457008165, 43.78675107763031], [-88.40556548936821, 43.786751672701875], [-88.40566797817173, 43.786747269942424], [-88.40570588236473, 43.78674564162236], [-88.40569576190039, 43.7872264765445], [-88.4056951549065, 43.787255316873065], [-88.40518385852522, 43.78725978194248]]]], "type": "MultiPolygon"}, "properties": {"mapid": 6, "owner": "THOMAS D BAKER", "site": "1095 PINE LAKE DRIVE, Fond du Lac WI 54935", "mail": "843 MULLEN DR", "sheet": "Vacant", "occupied": "No", "btype": "Vacant Land", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "Land value only \u2014 vacant lot", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40702089798276, 43.78724373937109], [-88.40703223482521, 43.78670456234159], [-88.4080181419338, 43.78671543732461], [-88.40802357612894, 43.787234983143414], [-88.40702089798276, 43.78724373937109]]]], "type": "MultiPolygon"}, "properties": {"mapid": 3, "owner": "DAVID P ERTL & GABRIEL I ERTL", "site": "326 N COUNTRY LANE, Fond du Lac WI 54935", "mail": "326 NORTH COUNTRY LN", "sheet": "Main", "occupied": "Yes", "btype": "Residential", "research": "No", "salute": "Dear David and Gabriel", "dnc": "", "fill": "#2E5496", "owner2": "GABRIEL I ERTL", "ownertype": "Person", "confidence": "High", "addressas": "David P Ertl and Gabriel I Ertl", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40232238823971, 43.787284770704225], [-88.40231386447857, 43.787272053322575], [-88.40277524443201, 43.78728081598362], [-88.40232238823971, 43.787284770704225]]]], "type": "MultiPolygon"}, "properties": {"mapid": 1, "owner": "THOMAS J VAREBROOK & REBECCA E VAREBROOK", "site": "1162 SPRING LAKE DRIVE, Fond du Lac WI 54935", "mail": "1162 SPRING LAKE DR", "sheet": "Main", "occupied": "Yes", "btype": "Residential", "research": "No", "salute": "Dear Thomas and Rebecca", "dnc": "", "fill": "#2E5496", "owner2": "REBECCA E VAREBROOK", "ownertype": "Person", "confidence": "High", "addressas": "Thomas J Varebrook and Rebecca E Varebrook", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40199304946515, 43.787287646767], [-88.40199274446071, 43.78726595361965], [-88.40231386447857, 43.787272053322575], [-88.40232238823971, 43.787284770704225], [-88.40199304946515, 43.787287646767]]]], "type": "MultiPolygon"}, "properties": {"mapid": 2, "owner": "BASM LLC", "site": "1164 SPRING LAKE DRIVE, Fond du Lac WI 54935", "mail": "889 E JOHNSON ST", "sheet": "Vacant", "occupied": "No", "btype": "Vacant Land", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "Land value only \u2014 vacant lot", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40148440928256, 43.78729208864026], [-88.40160792929298, 43.78670330102808], [-88.4018031766622, 43.784514694683956], [-88.40195407831726, 43.784516117531865], [-88.40196924925249, 43.78559534829654], [-88.4019890237068, 43.787001363382664], [-88.40199120075772, 43.787156157844144], [-88.40199274446071, 43.78726595361965], [-88.40199304946515, 43.787287646767], [-88.40148440928256, 43.78729208864026]]]], "type": "MultiPolygon"}, "properties": {"mapid": 14, "owner": "STATE OF WIS DEPT OF TRANSPORTATION", "site": "0 E JOHNSON STREET, Fond du Lac WI 54937", "mail": "944 VANDERPERREN WAY", "sheet": "Duplicates", "occupied": "No", "btype": "Government Land (no address)", "research": "No", "salute": "", "dnc": "", "fill": "#FFFF00", "owner2": "", "ownertype": "Government", "confidence": "High", "addressas": "", "notes": "Government land with no site address (road / right-of-way) \u2014 nothing to mail", "occupancy": "Institution \u2014 church, government office, school, or care facility, not a private residence", "city": "Green Bay", "state": "WI", "zip": "54304", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40822566832786, 43.78543417121453], [-88.4082260072518, 43.78515985086265], [-88.40822606191055, 43.78515985180652], [-88.40884538206178, 43.78517108710994], [-88.40926317453888, 43.78517866454772], [-88.40926284035892, 43.7854529840059], [-88.40822722859174, 43.785434199467325], [-88.40822566832786, 43.78543417121453]]]], "type": "MultiPolygon"}, "properties": {"mapid": 25, "owner": "KURT W PIEPER & KIM M PIEPER", "site": "0 KAIRIS COURT, Fond du Lac WI 54935", "mail": "53 KAIRIS CT", "sheet": "Vacant", "occupied": "No", "btype": "Vacant Land", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "KIM M PIEPER", "ownertype": "Unknown", "confidence": "High", "addressas": "", "notes": "Land value only \u2014 vacant lot", "occupancy": "Rental / Non-Owner \u2014 owner doesn't live there (out-of-state owner, mailing address doesn't match)", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40926317453888, 43.78517866454772], [-88.41002023136537, 43.785192390447406], [-88.41001990064585, 43.78546671081011], [-88.40926284035892, 43.7854529840059], [-88.40926317453888, 43.78517866454772]]]], "type": "MultiPolygon"}, "properties": {"mapid": 24, "owner": "KURT PIEPER & KIM PIEPER", "site": "53 KAIRIS COURT, Fond du Lac WI 54935", "mail": "53 KAIRIS CT", "sheet": "Main", "occupied": "Yes", "btype": "Residential", "research": "No", "salute": "Dear Kurt and Kim", "dnc": "", "fill": "#2E5496", "owner2": "KIM PIEPER", "ownertype": "Person", "confidence": "High", "addressas": "Kurt Pieper and Kim Pieper", "notes": "Mailing address matches \u2014 owner occupied", "occupancy": "Owner-Occupied \u2014 confirmed match, resident likely home", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.4121479390924, 43.7860620053574], [-88.41213892887353, 43.78605400424518], [-88.41213167898486, 43.786045113766235], [-88.41212635378847, 43.78603553547745], [-88.41212307401142, 43.786025486528956], [-88.41212191400868, 43.78601519474122], [-88.41212117508337, 43.785927686371046], [-88.41211447821411, 43.785133781249264], [-88.41211443262698, 43.78512843611941], [-88.41298906326337, 43.78512605881698], [-88.41318391259313, 43.785125528388505], [-88.41318351953905, 43.78602288564887], [-88.41225217314769, 43.78608173634516], [-88.41222242915921, 43.786083223703955], [-88.41220876704952, 43.78608312129071], [-88.41219526759124, 43.78608159512037], [-88.41218221199877, 43.786078676985404], [-88.41216987223993, 43.78607442767505], [-88.41215850537056, 43.786068935708876], [-88.4121479390924, 43.7860620053574]]]], "type": "MultiPolygon"}, "properties": {"mapid": 19, "owner": "Owner or Manager", "site": "270 N PRAIRIE ROAD, Fond du Lac WI 54935", "mail": "PO BOX 1006", "sheet": "Main", "occupied": "No", "btype": "Commercial / Rental", "research": "Yes", "salute": "Dear Owner or Manager", "dnc": "", "fill": "#7B2D8B", "owner2": "", "ownertype": "Business", "confidence": "High", "addressas": "Owner or Manager", "notes": "Property owner: C D Smith Construction Inc", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Fond du Lac", "state": "WI", "zip": "54936", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.40825077457829, 43.787232999055746], [-88.40824538725242, 43.786718120179216], [-88.40824563322523, 43.786718123076675], [-88.40843235041741, 43.78672018081731], [-88.4085324432951, 43.786718377753914], [-88.40863201557498, 43.78671077482376], [-88.40873042794331, 43.78669742084225], [-88.40882704853477, 43.78667840154985], [-88.40892125698973, 43.786653839061614], [-88.40901244843795, 43.786623891083075], [-88.40910003738256, 43.78658874989743], [-88.40918346145958, 43.78654864113096], [-88.40926218504896, 43.78650382230411], [-88.4093733397667, 43.7864396053505], [-88.40949008881071, 43.78638082910835], [-88.40961192562702, 43.78632774858993], [-88.4097383215917, 43.78628059409491], [-88.4098687283043, 43.78623957021129], [-88.41000257996663, 43.78620485492794], [-88.4101392958374, 43.786176598862596], [-88.41027828275118, 43.78615492460848], [-88.41041893769162, 43.786139926202424], [-88.41056065040696, 43.786131668717246], [-88.41070280605732, 43.7861301879792], [-88.41084478788146, 43.7861354904127], [-88.41095367889304, 43.786144187346494], [-88.41106182028854, 43.78615687697896], [-88.4116594418098, 43.786238332264126], [-88.41199533347795, 43.78629337252549], [-88.41199919361942, 43.786294005496956], [-88.41200672203064, 43.787200198968144], [-88.40825077457829, 43.787232999055746]]], [[[-88.4082277077131, 43.785639905436426], [-88.40822810274885, 43.78563991295362], [-88.41186938797473, 43.78570557974092], [-88.41187250467127, 43.78607525223535], [-88.41170144228676, 43.786076577306154], [-88.4111038272871, 43.78599512314347], [-88.41106336981765, 43.78598987257492], [-88.4109157255251, 43.785975072476425], [-88.41076709366212, 43.785966981079106], [-88.41061805443684, 43.785965629968985], [-88.41046918964713, 43.78597102442031], [-88.41032108041006, 43.78598314337495], [-88.41017430489406, 43.78600193952451], [-88.41002943606252, 43.78602733949515], [-88.40988703943762, 43.78605924413373], [-88.40974767089328, 43.786097528894885], [-88.40961187448566, 43.786142044327086], [-88.40948018032977, 43.7861926166559], [-88.4093531025304, 43.78624904846221], [-88.40923113717551, 43.78631111945265], [-88.40911476039989, 43.786378587319426], [-88.40904201989301, 43.78641957456247], [-88.40896448039247, 43.786455650113545], [-88.40888277188311, 43.78648652086614], [-88.4087975582255, 43.786511936001254], [-88.40870953176164, 43.7865316890255], [-88.40861940768954, 43.786545619448866], [-88.40852791825172, 43.786553614088966], [-88.40843580678529, 43.78655560799066], [-88.40824391101951, 43.78655349299838], [-88.40824381287884, 43.78655349201961], [-88.40824381315004, 43.786553314720024], [-88.40824366283397, 43.78655331279937], [-88.40823675945589, 43.78655323705715], [-88.4082283997306, 43.78570969911725], [-88.4082277077131, 43.785639905436426]]]], "type": "MultiPolygon"}, "properties": {"mapid": 11, "owner": "FOND DU LAC COUNTY", "site": "0 N PRAIRIE ROAD, Fond du Lac WI 54935", "mail": "CITY COUNTY GOV CENTER", "sheet": "Vacant", "occupied": "No", "btype": "Government Land (no address)", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Government", "confidence": "High", "addressas": "", "notes": "Government land with no site address (road / right-of-way) \u2014 nothing to mail", "occupancy": "Institution \u2014 church, government office, school, or care facility, not a private residence", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.41318391259313, 43.785125528388505], [-88.41298906326337, 43.78512605881698], [-88.41298441878914, 43.784568245694985], [-88.41297952369123, 43.78398029765057], [-88.41334132374831, 43.783985326339014], [-88.4147933052139, 43.78406198286045], [-88.41481139261684, 43.78622610634127], [-88.41463787417526, 43.786180061548954], [-88.41446166592193, 43.786139733181976], [-88.41428312645651, 43.78610520331107], [-88.41410261912078, 43.78607654220654], [-88.41392051125949, 43.78605380819538], [-88.41373717347312, 43.786037047542486], [-88.41355297886403, 43.786026294356624], [-88.41336830227746, 43.78602157052102], [-88.41318351953905, 43.78602288564887], [-88.41318391259313, 43.785125528388505]]]], "type": "MultiPolygon"}, "properties": {"mapid": 26, "owner": "FOND DU LAC COUNTY", "site": "Fond du Lac WI 54935", "mail": "CITY COUNTY GOV CENTER", "sheet": "Vacant", "occupied": "No", "btype": "Government Land (no address)", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Government", "confidence": "High", "addressas": "", "notes": "Government land with no site address (road / right-of-way) \u2014 nothing to mail", "occupancy": "Institution \u2014 church, government office, school, or care facility, not a private residence", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.41213191460906, 43.78719910568141], [-88.41212439417312, 43.78629467422619], [-88.41220454261538, 43.78629314739569], [-88.41228457746823, 43.78628970057803], [-88.41302837360847, 43.786248709736974], [-88.41320823414118, 43.786241903279546], [-88.41338833788674, 43.786241289511054], [-88.41356827884483, 43.786246869815145], [-88.41374765138195, 43.78625863161241], [-88.41392605114545, 43.78627654838873], [-88.4141030759746, 43.78630057975496], [-88.41427832680695, 43.78633067153807], [-88.4144514085774, 43.786366755903096], [-88.41462193110861, 43.786408751506066], [-88.41478950999021, 43.78645656367726], [-88.41495376744497, 43.78651008463457], [-88.41510701155808, 43.78656634444786], [-88.4152565824378, 43.786627573318746], [-88.41540217328733, 43.786693645660435], [-88.41554348547052, 43.786764425951276], [-88.41568022912412, 43.78683976901264], [-88.41581212375242, 43.78691952030655], [-88.41609726050682, 43.787100022246435], [-88.41601868812874, 43.787165163110714], [-88.41213191460906, 43.78719910568141]]]], "type": "MultiPolygon"}, "properties": {"mapid": 9, "owner": "FOND DU LAC COUNTY", "site": "Fond du Lac WI 54935", "mail": "CITY COUNTY GOV CENTER", "sheet": "Vacant", "occupied": "No", "btype": "Government Land (no address)", "research": "No", "salute": "", "dnc": "", "fill": "#808080", "owner2": "", "ownertype": "Government", "confidence": "High", "addressas": "", "notes": "Government land with no site address (road / right-of-way) \u2014 nothing to mail", "occupancy": "Institution \u2014 church, government office, school, or care facility, not a private residence", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}, {"type": "Feature", "geometry": {"coordinates": [[[[-88.41200672203064, 43.787200198968144], [-88.41199919361942, 43.786294005496956], [-88.41212439417312, 43.78629467422619], [-88.41213191460906, 43.78719910568141], [-88.41200672203064, 43.787200198968144]]], [[[-88.41601868812874, 43.787165163110714], [-88.41609726050682, 43.787100022246435], [-88.41619668098221, 43.78716360872763], [-88.41601868812874, 43.787165163110714]]], [[[-88.41546478746801, 43.78409702435315], [-88.41546346178252, 43.7841103892621], [-88.41548378396332, 43.78648574852182], [-88.41534824596408, 43.786426768248745], [-88.41520966680491, 43.78637162182948], [-88.41518818241735, 43.78636208800218], [-88.415168635622, 43.786350571938584], [-88.41515137256609, 43.78633727757329], [-88.41513669895414, 43.78632244033214], [-88.4151245616671, 43.78630581487537], [-88.41511567783196, 43.78628814284898], [-88.41511021448112, 43.78626975652537], [-88.41510827433419, 43.78625100160696], [-88.41509992448019, 43.785274306559245], [-88.41508969050126, 43.78407721812064], [-88.41546478746801, 43.78409702435315]]]], "type": "MultiPolygon"}, "properties": {"mapid": 20, "owner": "Current Resident", "site": "325 CAMPUS DRIVE, Fond du Lac WI 54935", "mail": "CITY COUNTY GOV CENTER", "sheet": "Multi_Occupant", "occupied": "No", "btype": "Apartment", "research": "Yes", "salute": "Dear Resident", "dnc": "", "fill": "#2E5496", "owner2": "", "ownertype": "Business / Rental", "confidence": "High", "addressas": "Fond Du Lac County", "notes": "Known multi-unit building \u2014 run Melissa units script for individual unit mailing list \u2014 ADD INDIVIDUAL UNIT ROWS BELOW", "occupancy": "Business / Rental Property \u2014 owned by a business or managed as a rental", "city": "Fond du Lac", "state": "WI", "zip": "54935", "verified_name": ""}}]};
+
+// 2026-08-22: mapids of DNC parcels, used to keep DNC parcels always solid
+// opaque red (the dncHatch overlay below draws on top) -- excluded from both
+// the Fill slider's fade effect and from the black "done" look, per Steve's
+// rule that the DNC hatch always wins visually. _dncBuildingSet is the same
+// idea for DNC building footprints (keyed by subid/bKey, same as
+// _buildingLayers below) -- populated once the buildings layer is built.
+var _dncSet = new Set();
+parcelsData.features.forEach(function(f) {
+  if (f.properties.dnc === 'YES') _dncSet.add(String(f.properties.mapid));
+});
+var _dncBuildingSet = new Set();
+// 2026-08-22: literal 0.30 here, not DEFAULT_FILL_OPACITY -- that constant
+// isn't declared until further down this same script (just above
+// getOpacity()), and this line runs before that point. Keep this in sync
+// with DEFAULT_FILL_OPACITY and the Fill slider's own value="30" default if
+// either ever changes. setParcelOpacity() keeps this updated live afterward.
+var _currentFillOpacity = 0.30;
+
+var _parcelLayers={};
+
+// 2026-07-12: Google Maps sometimes can't geocode certain county-style
+// street-suffix abbreviations -- "LA" for Lane is the confirmed case
+// (Google appears to read it as the Louisiana state code instead), even
+// though the rest of the address is fine. Swap in the USPS-standard
+// abbreviation just for the directions/search links, leaving the
+// displayed/mailing address untouched. Add more replacements here if
+// other suffixes turn out to trip Google up too.
+function _mapsAddr(site) {
+  if (!site) return site;
+  return site.replace(/\bLA\b\.?/gi, 'Ln');
+}
+
+function getPopup(p) {
+  var badge = '';
+  if (p.dnc === 'YES') badge = '<span class="popup-badge badge-dnc">DO NOT CONTACT</span>';
+  else if (p.sheet === 'Institutions') badge = '<span class="popup-badge badge-inst">' + p.btype + '</span>';
+  else if (p.sheet === 'Vacant') badge = '<span class="popup-badge badge-vacant">Vacant</span>';
+  else if (p.btype === 'Commercial / Rental') badge = '<span class="popup-badge badge-biz">Business</span>';
+  else if (p.occupied === 'Yes') badge = '<span class="popup-badge badge-owner">Owner Occupied</span>';
+  if (p.research === 'Yes') badge += '<span class="popup-badge badge-research">Research Needed</span>';
+
+  var mailHtml = p.mail ? '<div class="popup-mail"> ' + p.mail + '</div>' : '';
+  var saluteHtml = p.salute && p.salute !== 'nan' ? '<div class="popup-mail" style="color:#888">Salutation: ' + p.salute + '</div>' : '';
+  // 2026-07-12: p.site is already the full "street, city state zip" address
+  // (built that way in refresh_html_map.py) -- appending ", Fond du Lac, WI"
+  // on top of that duplicated the city/state/zip and made Google Maps fail
+  // to find the address (confirmed by Steve). Use p.site as-is.
+  var mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(_mapsAddr(p.site));
+  var viewUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(_mapsAddr(p.site));
+  var mapsHtml = p.site ? '<div style="margin-top:6px"><a href="' + mapsUrl + '" target="_blank" style="font-size:12px;color:#1a73e8;text-decoration:none;">&#x1F4CD; Get Directions</a></div>' : '';
+
+  // 2026-08-22: "Mark as Worked" button, right inside the popup that already
+  // opens on a normal tap -- second entry point into the SAME _toggleDone()/
+  // localStorage state the Mailing List checkbox already drives (not a new
+  // mechanism). Uses a data-attribute + fixed onclick handler (not a string
+  // built with the mapid embedded in a JS literal) so there's no quoting to
+  // get wrong, and works the same whether mapid is a number or a string.
+  var doneNow = (typeof _isDone === 'function') ? _isDone(p.mapid) : false;
+  var doneHtml = '<div style="margin-top:8px">' +
+    '<button class="popup-done-btn" data-key="' + p.mapid + '" onclick="_toggleDoneFromPopup(this.dataset.key)" ' +
+    'style="padding:7px 16px;border:1px solid #ccc;border-radius:6px;font-size:13px;cursor:pointer;background:' + (doneNow ? '#e0e0e0' : 'white') + ';font-weight:bold;width:100%;">' +
+    (doneNow ? '&#x2611; Worked &mdash; tap to undo' : '&#x2610; Mark as Worked') +
+    '</button></div>';
+
+  return '<div class="popup-inner">' +
+    '<div class="popup-mapid">Parcel #' + p.mapid + '</div>' +
+    '<div class="popup-site">' + p.site + '</div>' +
+    '<div class="popup-owner">' + p.owner + '</div>' +
+    mailHtml + saluteHtml +
+    mapsHtml +
+    '<div style="margin-top:6px">' + badge + '</div>' +
+    doneHtml +
+    '</div>';
+}
+
+function getParcelArea(feature) {
+  var coords = feature.geometry.coordinates;
+  var allPoints = [];
+  function collectPoints(c) {
+    if (typeof c[0] === 'number') { allPoints.push(c); }
+    else { c.forEach(collectPoints); }
+  }
+  collectPoints(coords);
+  if (allPoints.length < 2) return 0;
+  var lats = allPoints.map(function(p) { return p[1]; });
+  var lngs = allPoints.map(function(p) { return p[0]; });
+  return (Math.max.apply(null,lats)-Math.min.apply(null,lats)) * (Math.max.apply(null,lngs)-Math.min.apply(null,lngs));
+}
+var DEFAULT_FILL_OPACITY = 0.3;  // 2026-07-14: matches opacity-slider's value="30" -- getOpacity()
+                                  // previously always returned 1.0 regardless of the slider default,
+                                  // so parcels loaded fully opaque until the slider was touched by hand.
+function getOpacity(feature) {
+  return DEFAULT_FILL_OPACITY;
+}
+// Store per-parcel area for label sizing
+var parcelAreas = {};
+parcelsData.features.forEach(function(f) {
+  parcelAreas[f.properties.mapid] = getParcelArea(f);
+});
+
+L.geoJSON(parcelsData, {
+  style: function(feature) {
+    var p = feature.properties;
+    return {
+      fillColor: p.fill,
+      fillOpacity: getOpacity(feature),
+      color: 'rgba(0,0,0,0.65)',
+      weight: 2.0
+    };
+  },
+  onEachFeature: function(feature, layer) {
+    var p = feature.properties;
+    _parcelLayers[p.mapid]=layer;
+    layer._origStyle={
+      fillColor:layer.options.fillColor,
+      fillOpacity:layer.options.fillOpacity,
+      color:layer.options.color,
+      weight:layer.options.weight
+    };
+    // 2026-08-22: bind a FUNCTION, not a plain string, so the popup is
+    // rebuilt fresh every time it opens (picks up the current done/undone
+    // state even if it changed from the Mailing List tab in between).
+    layer.bindPopup(function(){ return getPopup(p); }, {maxWidth: 300});
+    var area = getParcelArea(feature);
+    // Store area on tooltip element for zoom-aware sizing.
+    // 2026-07-11: skip the label entirely for placeholder mapids
+    // (prefixed "_dissolved" by refresh_html_map.py) -- these mark a
+    // parcel that was broken into individual buildings, kept only so the
+    // polygon/fill still shows; the placeholder name isn't a real MapID
+    // and showing it just confuses the map.
+    // 2026-07-14: also skip it for Multi_Occupant parcels (townhouse-style
+    // complexes with many individually-addressed units) -- each building
+    // footprint inside now gets its own real street-address label, so the
+    // parcel's plain container number (e.g. "64") just lands on top of
+    // whichever building happens to sit at the parcel's center and looks
+    // like doubled/confusing text, same reasoning as the _dissolved case.
+    // Only when isApartment is true, though -- that's the only case where
+    // buildings actually get their own labels to replace this one; for any
+    // other territory type the parcel's own number is still the only label
+    // that area would have, so it must stay.
+    if (!(p.mapid && String(p.mapid).indexOf('_dissolved') === 0) &&
+        !(isApartment && p.sheet === 'Multi_Occupant')) {
+      var tt = layer.bindTooltip(String(p.mapid), {
+        permanent: true, direction: 'center',
+        className: 'mapid-label',
+        offset: [0, 0]
+      });
+      layer.on('tooltipopen', function(e) {
+        e.tooltip.getElement().setAttribute('data-area', area);
+      });
+    }
+  }
+}).addTo(map);
+
+// 2026-07-12: building footprints used to be permanently solid black.
+// Now they default to grey and only turn black once the matching
+// mailing-list checkbox is marked done -- _buildingLayers is the
+// per-building lookup _updateParcel() (in the table-tracking script
+// below) uses to flip the color, same pattern as _parcelLayers.
+var _buildingLayers = {};
+var BUILDING_DEFAULT_FILL = '#C4C4C4';
+var BUILDING_DONE_FILL    = '#000000';
+
+if (buildingsData) {
+  L.geoJSON(buildingsData, {
+    style: function(feature) {
+      var p = feature.properties||{};
+      // 2026-08-16: excluded/DNC buildings get the same permanent red as
+      // their parcel -- set once here at load, never touched by
+      // _updateParcel() since _toggleDone() now skips these mapids entirely.
+      if (p.dnc === 'YES') {
+        return {fillColor: '#CC0000', fillOpacity: DEFAULT_FILL_OPACITY,
+                 color: '#660000', weight: 1.5};
+      }
+      return {
+        fillColor: BUILDING_DEFAULT_FILL,
+        fillOpacity: DEFAULT_FILL_OPACITY,
+        color: '#000000',
+        weight: 1.5,
+        // 2026-08-08: was "!p.secondary" alone -- Leaflet lets a per-feature
+        // style's interactive key override the geoJSON-level "interactive:
+        // isApartment" below, so non-apartment buildings (Town/R/Business)
+        // ended up interactive anyway with no popup ever bound to them
+        // (onEachFeature is a no-op below when !isApartment). That created
+        // an invisible dead zone right over each building's roofline that
+        // swallowed clicks meant for the parcel layer underneath -- Steve
+        // had to click around the building outline on Town_108 before a
+        // popup would open. Gating on isApartment here too makes the
+        // buildings layer genuinely click-through for non-apartment
+        // territories, matching the no-op onEachFeature's intent. No change
+        // for apartment territories -- isApartment && !p.secondary reduces
+        // to the same !p.secondary as before when isApartment is true.
+        interactive: isApartment && !p.secondary
+      };
+    },
+    interactive: isApartment,
+    onEachFeature: isApartment ? function(feature, layer) {
+      var p = feature.properties;
+      var isSecondary = !!p.secondary;
+      var bKey = p.subid ? p.subid : (p.mapid || '');
+      // 2026-07-28: a secondary duplicate (a smaller building sharing
+      // another building's address, e.g. a garage) never becomes "the
+      // responder" for that address's checkbox, and never gets a click
+      // popup -- only the largest footprint per address stays
+      // interactive. It still gets its own permanent on-map label (added
+      // by refresh_html_map.py's buildings-tooltip-label patch, same as
+      // every other building), just noticeably smaller -- see that
+      // script for the label-sizing logic. Deliberately NOT duplicating
+      // any label logic here -- that patch already handles every
+      // building's label correctly (including L-shaped/tightly-packed
+      // footprint anchoring), so this only controls click/checkbox
+      // behavior.
+      if (bKey !== '' && !isSecondary) {
+        _buildingLayers[bKey] = layer;
+        layer._origStyle = {
+          fillColor: layer.options.fillColor,
+          fillOpacity: layer.options.fillOpacity,
+          color: layer.options.color,
+          weight: layer.options.weight
+        };
+        // 2026-08-22: same DNC-always-wins tracking as _dncSet does for
+        // parcels, keyed the same way _buildingLayers itself is keyed.
+        if (p.dnc === 'YES') { _dncBuildingSet.add(String(bKey)); }
+      }
+      if (p.site && p.site !== '' && !isSecondary) {
+        var subLabel = p.subid ? p.subid.toUpperCase() : ('Parcel #' + p.mapid);
+        var saluteHtml = p.salute && p.salute !== 'nan' && p.salute !== ''
+          ? '<div class="popup-mail" style="color:#888">Salutation: ' + p.salute + '</div>' : '';
+        // 2026-07-15: p.note is a short data-provenance flag ("Approximate
+        // match" / "From Fond du Lac County GIS") -- shown as its own line,
+        // kept OUT of p.site itself so the Get Directions link below still
+        // gets a clean, real address.
+        var noteHtml = p.note && p.note !== ''
+          ? '<div class="popup-mail" style="color:#888;font-style:italic">' + p.note + '</div>' : '';
+        var bMapsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(_mapsAddr(p.site));
+        var bMapsHtml = '<div style="margin-top:6px"><a href="' + bMapsUrl + '" target="_blank" style="font-size:12px;color:#1a73e8;text-decoration:none;">&#x1F4CD; Get Directions</a></div>';
+        // 2026-08-22: same "Mark as Worked" button as the regular parcel
+        // popup above, keyed by bKey (subid when this building has its own
+        // unit, otherwise the parent mapid) -- matches how _buildingLayers
+        // is keyed, so it lights up/darkens the correct footprint. Also
+        // bound as a function (not a static string) for the same lazy/
+        // fresh-state reason as the parcel popup above.
+        layer.bindPopup(function(){
+          var doneNow = (typeof _isDone === 'function') ? _isDone(bKey) : false;
+          var doneHtml = '<div style="margin-top:8px">' +
+            '<button class="popup-done-btn" data-key="' + bKey + '" onclick="_toggleDoneFromPopup(this.dataset.key)" ' +
+            'style="padding:7px 16px;border:1px solid #ccc;border-radius:6px;font-size:13px;cursor:pointer;background:' + (doneNow ? '#e0e0e0' : 'white') + ';font-weight:bold;width:100%;">' +
+            (doneNow ? '&#x2611; Worked &mdash; tap to undo' : '&#x2610; Mark as Worked') +
+            '</button></div>';
+          return '<div class="popup-inner">' +
+            '<div class="popup-mapid">Building ' + subLabel + '</div>' +
+            '<div class="popup-site">' + p.site + '</div>' +
+            '<div class="popup-owner">' + (p.owner || '') + '</div>' +
+            saluteHtml + noteHtml +
+            bMapsHtml +
+            doneHtml +
+            '</div>';
+        }, {maxWidth: 300});
+      }
+    } : function(feature, layer) {}
+  }).addTo(map);
+}
+
+// 2026-08-17: diagonal-hatch overlay for excluded/DNC parcels & buildings,
+// drawn in its own small SVG-rendered layer on top of the main map (which
+// uses preferCanvas for performance -- canvas fills can't reference the
+// dncHatch SVG pattern, but only the handful of dnc-flagged features go
+// through this extra layer, so there's no performance concern).
+// interactive:false so it never blocks popups/clicks on the real layer underneath.
+var _dncParcelFeatures = parcelsData.features.filter(function(f){return f.properties.dnc==='YES';});
+if (_dncParcelFeatures.length) {
+  L.geoJSON({type:'FeatureCollection', features:_dncParcelFeatures}, {
+    renderer: L.svg(),
+    interactive: false,
+    style: function(){return {fillColor:'url(#dncHatch)', fillOpacity:0.85, stroke:false};}
+  }).addTo(map);
+}
+if (buildingsData) {
+  var _dncBuildingFeatures = buildingsData.features.filter(function(f){return (f.properties||{}).dnc==='YES';});
+  if (_dncBuildingFeatures.length) {
+    L.geoJSON({type:'FeatureCollection', features:_dncBuildingFeatures}, {
+      renderer: L.svg(),
+      interactive: false,
+      style: function(){return {fillColor:'url(#dncHatch)', fillOpacity:0.85, stroke:false};}
+    }).addTo(map);
+  }
+}
+
+// 2026-09-02: segregated child-territory overlay -- green hatch over the
+// area a separately-drawn child territory already covers, so a publisher
+// can see why that spot is blank. Same small-SVG-layer technique as the
+// DNC hatch above. Purely visual -- doesn't affect the mailing list.
+if (childTerritoriesData && childTerritoriesData.features.length) {
+  var _childOverlay = L.geoJSON(childTerritoriesData, {
+    renderer: L.svg(),
+    interactive: false,
+    style: function(){return {fillColor:'url(#segChildHatch)', fillOpacity:0.85, stroke:true, color:'#1E6344', weight:1};}
+  }).addTo(map);
+  // Label each child territory with its own name, centered on its own
+  // shape, so anyone comparing this map against Territory Helper can tell
+  // at a glance which hatched area is which child territory.
+  _childOverlay.eachLayer(function(_cLayer){
+    var _cName = (_cLayer.feature && _cLayer.feature.properties && _cLayer.feature.properties.childName) || '';
+    if (!_cName) return;
+    // 2026-09-03: use this child's pre-computed true-center-of-shape
+    // position (falls back to the old rectangle-center if that wasn't
+    // computed for some reason) -- fixes narrow/bent shapes like
+    // Apartment_401 where the rectangle center can miss the shape.
+    var _cProps = _cLayer.feature.properties || {};
+    var _cCenter = (_cProps.labelLat !== undefined && _cProps.labelLat !== null &&
+                    _cProps.labelLng !== undefined && _cProps.labelLng !== null)
+      ? L.latLng(_cProps.labelLat, _cProps.labelLng)
+      : _cLayer.getBounds().getCenter();
+    // 2026-09-03: store this territory's own real geographic size on the
+    // label (same bounding-box-area measure used for the MapID number
+    // labels below) so updateChildLabelSizes() can shrink small child
+    // territories -- e.g. the tightly-packed Apartment_409-413 cluster --
+    // relative to large ones like Apartment_406, instead of one fixed size
+    // for every child regardless of how small its shape actually is.
+    var _cArea = getParcelArea(_cLayer.feature);
+    L.marker(_cCenter, {
+      icon: L.divIcon({
+        className: '',
+        html: '<div class="child-territory-label" data-area="' + _cArea + '" style="display:inline-block;font-weight:700;'
+             +'color:#1E6344;opacity:0.9;'
+             +'white-space:nowrap;pointer-events:none;'
+             +'text-shadow:1px 1px 0px white,-1px -1px 0px white,1px -1px 0px white,-1px 1px 0px white;'
+             +'transform:translate(-50%,-50%);">' + _cName + '</div>',
+        iconSize: [0, 0],
+        iconAnchor: [0, 0]
+      }),
+      interactive: false
+    }).addTo(map);
+  });
+  // 2026-11-02 (v5.31): building outlines inside the striped areas (look-
+  // only), then the territory's dashed boundary line again ON TOP of the
+  // stripes so it shows where a child territory hangs over it (Steve).
+  if (typeof childBuildingsData !== 'undefined' && childBuildingsData) {
+    L.geoJSON(childBuildingsData, {
+      renderer: L.svg(), interactive: false,
+      style: function(){return {fill:false, color:'#333333', weight:1, opacity:0.85};}
+    }).addTo(map);
+  }
+  if (boundaryData) {
+    L.geoJSON(boundaryData, {
+      renderer: L.svg(), interactive: false,
+      style: function(){return {fill:false, color:'#7B2D8B', weight:3, opacity:1, dashArray:'8,5'};}
+    }).addTo(map);
+  }
+}
+
+if (!boundaryData) {
+  map.setView([43.77, -88.43], 14);
+}
+
+// Scale MapID labels by zoom level AND parcel area
+function updateLabelSizes() {
+  var z = map.getZoom();
+  // Base size from zoom
+  var baseSize;
+  if      (z <= 13) baseSize = 11;
+  else if (z <= 14) baseSize = 15;
+  else if (z <= 15) baseSize = 19;
+  else if (z <= 16) baseSize = 24;
+  else              baseSize = 30;
+  document.querySelectorAll('.mapid-label').forEach(function(el) {
+    var area = parseFloat(el.getAttribute('data-area') || 0);
+    var scale = 1.0;
+    // Shrink labels for small parcels
+    if      (area < 0.000003) scale = 0.45;
+    else if (area < 0.000008) scale = 0.60;
+    else if (area < 0.00002)  scale = 0.75;
+    else if (area < 0.00006)  scale = 0.88;
+    var finalSize = Math.max(7, Math.round(baseSize * scale));
+    // 2026-07-28: a "secondary" duplicate building (e.g. a garage sharing
+    // an apartment building's address) gets a noticeably smaller label
+    // than the real/primary building at that address, at every zoom
+    // level -- computed here (rather than a flat CSS override) so it
+    // shrinks and grows proportionally with everything else instead of
+    // fighting the zoom-based sizing above.
+    if (el.classList.contains('mapid-label-sm')) {
+      finalSize = Math.max(6, Math.round(finalSize * 0.55));
+    }
+    el.style.fontSize = finalSize + 'px';
+  });
+}
+map.on('zoomend', updateLabelSizes);
+map.on('load', updateLabelSizes);
+setTimeout(updateLabelSizes, 500);
+
+// 2026-09-03: scale each child-territory-name label by its own territory's
+// real size AND the current zoom level -- same two-factor approach as
+// updateLabelSizes() above for the MapID number labels. Area cutoffs below
+// were calibrated against the actual 13 Town_1 child-territory boundary
+// sizes (smallest ~0.0000015, largest ~0.0000321) rather than guessed, so a
+// tightly-packed cluster of small child territories (e.g. Apartment_409
+// through 413) gets noticeably smaller text than a large one like
+// Apartment_406, and every label still grows a bit when you zoom in and
+// shrinks when you zoom out.
+function updateChildLabelSizes() {
+  var z = map.getZoom();
+  var baseSize;
+  if      (z <= 13) baseSize = 11;
+  else if (z <= 14) baseSize = 15;
+  else if (z <= 15) baseSize = 19;
+  else if (z <= 16) baseSize = 24;
+  else              baseSize = 30;
+  document.querySelectorAll('.child-territory-label').forEach(function(el) {
+    var area = parseFloat(el.getAttribute('data-area') || 0);
+    var scale;
+    if      (area < 0.000002) scale = 0.30;
+    else if (area < 0.000004) scale = 0.40;
+    else if (area < 0.00001)  scale = 0.50;
+    else if (area < 0.00002)  scale = 0.60;
+    else                      scale = 0.68;
+    var finalSize = Math.max(7, Math.round(baseSize * scale));
+    el.style.fontSize = finalSize + 'px';
+  });
+}
+map.on('zoomend', updateChildLabelSizes);
+map.on('load', updateChildLabelSizes);
+setTimeout(updateChildLabelSizes, 500);
+</script>
+<style>
+.mapid-label {
+  background: transparent; border: none; box-shadow: none;
+  font-weight: bold; color: white;
+  text-shadow: 0 0 3px rgba(0,0,0,0.9), 0 0 3px rgba(0,0,0,0.9);
+  pointer-events: none; transition: font-size 0.1s;
+}
+</style>
+<script>
+var _allRows=[];
+// 2026-07-27: sort state used to be one fixed entry per confidence bucket
+// (conf/ver/res/dnc). Now that the Mailing List tab groups by street within
+// each sheet section (Residential/Multi-Occupant/Institutions), each street
+// banner needs its own independent sort state -- clicking "sort by Owner"
+// on Viking Dr shouldn't touch Columbia Dr's order. Keyed lazily by
+// "<sec>|<STREET>" via _getSortState() below instead of a fixed object.
+var _sortState={};
+function _getSortState(key){
+  if(!_sortState[key]){_sortState[key]={col:-1,asc:true};}
+  return _sortState[key];}
+
+function _doneKey(mid){return 'done_'+_TERRITORY+'_'+mid;}
+function _isDone(mid){return localStorage.getItem(_doneKey(mid))==='1';}
+function _setDone(mid,done){if(done)localStorage.setItem(_doneKey(mid),'1');else localStorage.removeItem(_doneKey(mid));}
+
+function _toggleDone(mid){
+  // 2026-08-16: excluded/DNC rows are locked -- clicking the map polygon
+  // or the mailing-list checkbox (both funnel through here) does nothing,
+  // so the permanent red set at page load can never be accidentally
+  // toggled into the normal done/not-done black-or-gray scheme, and these
+  // rows never enter Done tracking or Firebase sync.
+  var row=tableData.filter(function(p){return String(p.mapid)===String(mid);})[0];
+  if(row&&row.dnc==='YES')return;
+  var done=!_isDone(mid);
+  _setDone(mid,done);
+  _updateParcel(mid,done);
+  _updateTableRow(mid,done);
+  _updateParentBuilding(mid);
+  _fbPush(mid,done);}
+
+// 2026-08-22: called by the "Mark as Worked" button inside a map popup
+// (both the regular parcel popup and the apartment/MHP building popup).
+// Same toggle as the Mailing List checkbox -- this is just a second place
+// to trigger it from, so it goes through the exact same DNC-lock and
+// Firebase-push logic in _toggleDone() above, nothing duplicated. Closes
+// the popup right after so the parcel's/building's new color is
+// immediately visible instead of hiding behind the still-open popup.
+function _toggleDoneFromPopup(key){
+  _toggleDone(key);
+  if(typeof map!=='undefined'&&map.closePopup)map.closePopup();}
+
+// 2026-07-28: live cross-device Done-checkbox sync. Whenever this page's
+// own Firebase listener sees a change (from this page's own toggle, or
+// from anyone else's), it lands here and applies it locally -- it never
+// calls _fbPush() itself, so this can't turn into a feedback loop. If
+// Firebase never loads (no internet in the field, CDN blocked, etc.)
+// this quietly no-ops and every checkbox still works exactly as it
+// always has, purely locally via localStorage.
+var _fbTerRef=null;
+function _fbInit(){
+  try{
+    if(typeof firebase==='undefined'||!firebase.initializeApp||!FIREBASE_CONFIG)return;
+    if(!window._fbApp){window._fbApp=firebase.initializeApp(FIREBASE_CONFIG);}
+    _fbTerRef=firebase.database().ref('territories/'+_TERRITORY);
+    _fbTerRef.on('value', function(snap){
+      var vals=snap.val()||{};
+      Object.keys(vals).forEach(function(mid){
+        var done=!!vals[mid];
+        if(_isDone(mid)!==done){
+          _setDone(mid,done);
+          _updateParcel(mid,done);
+          _updateTableRow(mid,done);
+          _updateParentBuilding(mid);}});
+    });
+  }catch(e){ if(window.console)console.warn('Firebase sync unavailable:',e); }}
+function _fbPush(mid,done){
+  if(_fbTerRef){
+    try{ _fbTerRef.child(String(mid)).set(!!done); }catch(e){}}}
+setTimeout(_fbInit,600);
+
+function _updateParcel(mid,done){
+  var lyr=_parcelLayers[mid];
+  // 2026-08-22: DNC parcels keep their red hatch look no matter what --
+  // skip the map color change entirely for them (the checkbox/table row
+  // still updates normally via _updateTableRow(); _toggleDone() also never
+  // reaches here with done=true for a DNC row in the first place, since it
+  // returns early, but this guard also covers the Firebase-sync call path
+  // in _fbInit()'s listener above, which calls _updateParcel() directly).
+  if(lyr && !_dncSet.has(String(mid))){
+    if(done){
+      // 2026-08-22: solid opaque black (was translucent #222222 @ 0.9) so a
+      // completed parcel reads as unambiguously done rather than blending
+      // toward the map underneath.
+      lyr.setStyle({fillColor:'#000000',fillOpacity:1.0,color:'#FFFFFF',weight:4});
+    } else {
+      // 2026-08-22: restore using the Fill slider's CURRENT position
+      // (_currentFillOpacity), not the DEFAULT_FILL_OPACITY snapshot
+      // captured once at page load in _origStyle -- previously un-marking a
+      // parcel as Worked always reset it to the slider's startup value
+      // (30%) even if the slider had since been moved elsewhere.
+      var base=lyr._origStyle||{fillColor:'#AAAAAA',color:'rgba(0,0,0,0.65)',weight:2.0};
+      lyr.setStyle({fillColor:base.fillColor,fillOpacity:_currentFillOpacity,color:base.color,weight:base.weight});
+    }}
+  var bld=_buildingLayers[mid];
+  // 2026-08-22: same DNC-always-wins and live-opacity fixes as the parcel
+  // branch above, applied to building footprints -- buildings are wired to
+  // the Fill slider the same way parcels are (see setParcelOpacity()), so
+  // they're subject to the exact same stale-opacity-on-undo bug.
+  if(bld && !_dncBuildingSet.has(String(mid))){
+    if(done){bld.setStyle({fillColor:BUILDING_DONE_FILL,fillOpacity:1.0});}
+    else{bld.setStyle({fillColor:(bld._origStyle&&bld._origStyle.fillColor)||BUILDING_DEFAULT_FILL,fillOpacity:_currentFillOpacity});}}}
+
+// 2026-07-28: apartment units each got their own checkbox/MapID (397-1,
+// 397-2, ...) so checking one unit wouldn't mark every unit in the
+// building done. Side effect: _updateParcel(mid,...) above only ever
+// matches _buildingLayers keyed by the building's OWN id ("397"), so no
+// individual unit's checkbox ever touched the building footprint's
+// black/done fill anymore -- checking every single unit in a building no
+// longer turned it black either. This restores that: whenever any row
+// with a parent_mapid is toggled, look at all of that same parent's
+// sibling rows and turn the building black only once every one of them
+// is checked (grey again the moment any one gets unchecked).
+function _updateParentBuilding(mid){
+  var row=null;
+  for(var i=0;i<tableData.length;i++){if(String(tableData[i].mapid)===String(mid)){row=tableData[i];break;}}
+  if(!row||!row.parent_mapid||String(row.parent_mapid)===String(mid))return;
+  var siblings=tableData.filter(function(p){return String(p.parent_mapid)===String(row.parent_mapid);});
+  if(!siblings.length)return;
+  var allDone=siblings.every(function(p){return _isDone(p.mapid);});
+  _updateParcel(row.parent_mapid,allDone);}
+
+function _updateTableRow(mid,done){
+  document.querySelectorAll('.ml-check[data-mid="'+mid+'"]').forEach(function(el){
+    el.textContent=done?'☑':'☐';});
+  document.querySelectorAll('.ml-row[data-mid="'+mid+'"]').forEach(function(el){
+    el.style.opacity=done?'0.45':'';});}
+
+function _applyDoneState(){
+  // Clear done state if this is a freshly generated map (build timestamp changed)
+  var buildKey='build_'+_TERRITORY;
+  var lastBuild=localStorage.getItem(buildKey);
+  if(lastBuild!==_BUILD_TS){
+    // New pipeline run - clear all done state for this territory
+    var toRemove=[];
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(k&&k.indexOf('done_'+_TERRITORY+'_')===0)toRemove.push(k);}
+    toRemove.forEach(function(k){localStorage.removeItem(k);});
+    localStorage.setItem(buildKey,_BUILD_TS);}
+  tableData.forEach(function(p){if(_isDone(p.mapid))_updateParcel(p.mapid,true);});
+  // 2026-07-28: also reflect apartment building footprints on load, same
+  // rule _updateParentBuilding() applies live -- black only once every
+  // unit sharing that parent_mapid is already checked.
+  var parentGroups={};
+  tableData.forEach(function(p){
+    if(p.parent_mapid&&String(p.parent_mapid)!==String(p.mapid)){
+      var pk=String(p.parent_mapid);
+      if(!parentGroups[pk])parentGroups[pk]=[];
+      parentGroups[pk].push(p.mapid);}});
+  Object.keys(parentGroups).forEach(function(pk){
+    var allDone=parentGroups[pk].every(function(m){return _isDone(m);});
+    if(allDone)_updateParcel(pk,true);});
+  var m=window.location.hash.match(/done=([0-9,]+)/);
+  if(m){m[1].split(',').forEach(function(s){
+    var mid=parseInt(s);
+    if(!isNaN(mid)){_setDone(mid,true);_updateParcel(mid,true);}});}}
+// 2026-08-22: prime _currentFillOpacity (and the legend/parcel/building
+// opacity) at the slider's own startup value BEFORE restoring done-state,
+// so the slider label, the parcels, and the legend all agree from the very
+// first paint, and any later un-mark-as-Worked restores the right value.
+setTimeout(function(){setParcelOpacity(0.30);_applyDoneState();},400);
+
+// 2026-08-14: was clipboard-copy-then-alert -- Steve's intent for this
+// button was always to hand the progress link to someone else the same
+// way Share Territory does (open the email app directly), not a silent
+// clipboard copy. It also had no .catch() on the clipboard promise, so a
+// failed copy (which does happen on phones) showed nothing at all -- no
+// error, no fallback, button just appeared to do nothing. mailto: sidesteps
+// both problems: no clipboard permission involved, and if nothing happens
+// it's because the phone has no mail app configured, same as Share
+// Territory already assumes.
+function shareProgress(){
+  // 2026-08-17: Steve's call -- this now shares the map+mailing list in
+  // its current state at ANY time, checked-off or not (previously
+  // blocked with an alert if nothing was checked off yet). Also adds a
+  // readable "shared as of [now]" timestamp so whoever receives it knows
+  // exactly when the link was sent.
+  //
+  // 2026-08-18: was building the link from window.location.href, which
+  // is a file:///C:/... path whenever the map is opened the normal way
+  // (Territory Master's "Open HTML Map" button opens the local file, not
+  // the hosted copy). That produced a link only Steve's own PC could
+  // open -- caught on Town_108. Files get published to GitHub Pages
+  // automatically under the same territory-folder/filename layout as the
+  // local copy, so build the link from that fixed hosted address plus
+  // this page's own filename instead, the same way Share Territory
+  // already does for its (folder-only) link.
+  var done=[];
+  tableData.forEach(function(p){if(_isDone(p.mapid))done.push(p.mapid);});
+  var _filename=window.location.pathname.split('/').pop();
+  var url=_PAGES_BASE+'/'+_TERRITORY+'/'+_filename+(done.length?'#done='+done.join(','):'');
+  var now=new Date();
+  var stamp=now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' at '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  var s=encodeURIComponent(_TERRITORY+' Territory Map & Mailing List');
+  var progressLine=done.length
+    ? 'Here is my progress on the '+_TERRITORY+' territory -- '+done.length+' address(es) checked off so far:'
+    : 'Here is the '+_TERRITORY+' territory map and mailing list:';
+  var afterLink=done.length
+    ? 'Opening this link will show the current map and mailing list, with the same addresses marked as checked off for you too.'
+    : 'Opening this link will show the current map and mailing list.';
+  var b=encodeURIComponent('Hello,\n\n'+progressLine+'\n\n'+url+'\n\nShared as of '+stamp+'.\n\n'+afterLink+'\n\nThank you!');
+  window.location.href='mailto:?subject='+s+'&body='+b;}
+
+function _sortIndicator(key,idx){
+  if(idx===0)return '';
+  var s=_getSortState(key);
+  if(s.col!==idx)return ' ▸';
+  return s.asc?' ▲':' ▼';}
+
+// 2026-07-27: every section (Residential/Multi-Occupant/Institutions) now
+// uses the same 7-column layout and is independently sortable per street
+// banner (key = "<sec>|<STREET>"), matching the per-street Excel Tables
+// added to generate_mailing_list.py's banner sheets this session.
+// 2026-07-27: Steve's call -- the Multi-Occupant table should show the
+// exact same columns as the Excel Multi_Occupant sheet (MapID, NAME1,
+// NAME2, BLDG #, STREET, UNIT, CITY, STATE, ZIP, NOTES) instead of the
+// generic Owner 1/Owner 2/Site Address/Source layout Residential and
+// Institutions use. secKey==='mo' switches both the header and each row
+// to the Excel-matching column set; every other section is unchanged.
+function _colHdr(key,secKey){
+  var isMO=secKey==='mo';
+  // 2026-08-17: added Occupancy to both layouts (matches the Excel
+  // mailing list's new column), and added Source to the Multi-Occupant
+  // layout, which previously had no Source column at all in the HTML map
+  // even though the Excel Multi_Occupant sheet has carried one for a
+  // while -- a real gap, closed here in the same pass as Occupancy.
+  var cols=isMO
+    ? ['','MapID','NAME1','NAME2','BLDG #','STREET','UNIT','CITY','STATE','ZIP','Occupancy','NOTES','SOURCE']
+    : ['','MapID','Owner 1','Owner 2','Site Address','Occupancy','Source','Reason/Notes'];
+  // 2026-09-14 (v5.16): UNIT widened 100px->150px -- 100px still clipped
+  // "Suite 101"-style values in practice; must match the same grid string
+  // in _row() below or columns drift.
+  // 2026-09-14 (v5.18): MapID widened 60px->85px -- MHP MapIDs can now be a
+  // real street number plus a 3-letter street tag (fill_addresses.py, same
+  // date), e.g. "1234ORI", too long for 60px. Must match _row() below.
+  // 2026-09-15 (v5.19): Site Address widened 250px->380px -- full address
+  // was only readable on hover before. Must match _row() below.
+  var grid=isMO
+    ? '30px 85px 150px 150px 70px 150px 150px 110px 45px 55px 190px 220px 150px'
+    : '30px 85px 170px 170px 380px 190px 130px 200px';
+  var h='<div class="ml-col-header" style="grid-template-columns:'+grid+';background:#FFA000;color:#3a2800;">';
+  cols.forEach(function(c,i){
+    if(i===0){h+='<span></span>';return;}
+    h+='<span data-key="'+key+'" data-col="'+i+'" onclick="_sortSection(this.dataset.key,parseInt(this.dataset.col))" title="Sort by '+c+'">'+c+_sortIndicator(key,i)+'</span>';
+  });
+  h+='</div>';
+  return h;}
+
+function _sortSection(key,col){
+  if(col===0)return;
+  var s=_getSortState(key);
+  if(s.col===col){s.asc=!s.asc;}else{s.col=col;s.asc=true;}
+  renderTable(_allRows);}
+
+function _sortRows(arr,key,secKey){
+  var s=_getSortState(key);
+  if(s.col<=0){
+    // No column chosen yet -- default to building-number order (numeric
+    // first, then alphabetic), same default the Excel banner sheets use
+    // within each street group.
+    return arr.slice().sort(function(a,b){
+      var an=_bnumOf(a.site),bn=_bnumOf(b.site);
+      var ai=parseInt(an,10),bi=parseInt(bn,10);
+      var aNum=!isNaN(ai)&&String(ai)===an, bNum=!isNaN(bi)&&String(bi)===bn;
+      if(aNum&&bNum)return ai-bi;
+      if(aNum!==bNum)return aNum?-1:1;
+      return an.localeCompare(bn);});}
+  var cols=secKey==='mo'
+    ? ['','mapid','owner','owner2','bldg','street','unit','site_city','site_state','site_zip','occupancy','notes','source']
+    : ['','mapid','owner','owner2','site_full','occupancy','source','notes'];
+  var sortKey=cols[s.col]||'mapid';
+  return arr.slice().sort(function(a,b){
+    var av,bv;
+    if(sortKey==='site_full'){
+      av=((a.site||'')+(a.site_city||'')+(a.site_state||'')+(a.site_zip||'')).toLowerCase();
+      bv=((b.site||'')+(b.site_city||'')+(b.site_state||'')+(b.site_zip||'')).toLowerCase();}
+    else if(sortKey==='mapid'){av=parseInt(a.mapid||0);bv=parseInt(b.mapid||0);}
+    else if(sortKey==='unit'){
+      var au=parseInt(a.unit,10),bu=parseInt(b.unit,10);
+      if(!isNaN(au)&&!isNaN(bu)){av=au;bv=bu;}
+      else{av=String(a.unit||'').toLowerCase();bv=String(b.unit||'').toLowerCase();}}
+    else{av=String(a[sortKey]||'').toLowerCase();bv=String(b[sortKey]||'').toLowerCase();}
+    if(av<bv)return s.asc?-1:1;
+    if(av>bv)return s.asc?1:-1;
+    return 0;});}
+
+// 2026-07-27: clicking a mailing-list row (anywhere except the checkbox,
+// which stops its own click from bubbling up here) pans/zooms the map to
+// that address's building and switches to the Map tab. New feature Steve
+// asked for alongside the street-banner layout.
+function _rowClickZoom(mid){
+  var target=_buildingLayers[mid]||_parcelLayers[mid];
+  if(!target||!target.getBounds)return;
+  showTab('map');
+  setTimeout(function(){map.fitBounds(target.getBounds(),{maxZoom:18});},150);}
+
+function _row(p,cls,secKey){
+  var mid=p.mapid;
+  // 2026-08-17: DNC/excluded rows show checked here without ever touching
+  // localStorage/_isDone -- keeps them permanently ticked-looking without
+  // pulling them into Done tracking or Firebase sync.
+  var done=_isDone(mid)||p.dnc==='YES';
+  var isMO=secKey==='mo';
+  // 2026-08-17: widened both grids to add Occupancy (both layouts) and
+  // Source (Multi-Occupant only) -- see the matching note on _colHdr().
+  // 2026-09-14 (v5.16): UNIT widened 100px->150px, matching _colHdr() above.
+  // 2026-09-14 (v5.18): MapID widened 60px->85px, matching _colHdr() above.
+  // 2026-09-15 (v5.19): Site Address widened 250px->380px, matching
+  // _colHdr() above.
+  var grid=isMO
+    ? '30px 85px 150px 150px 70px 150px 150px 110px 45px 55px 190px 220px 150px'
+    : '30px 85px 170px 170px 380px 190px 130px 200px';
+  var rowStyle=(done?'opacity:0.45;':'')+'cursor:pointer;';
+  var r='<div class="ml-row '+cls+'" data-mid="'+mid+'" onclick="_rowClickZoom(\''+mid+'\')" style="grid-template-columns:'+grid+';'+rowStyle+'">';
+  r+='<span class="ml-check" data-mid="'+mid+'" onclick="event.stopPropagation();_toggleDone(\''+mid+'\')" style="cursor:pointer;text-align:center;font-size:15px;user-select:none;">'+(done?'☑':'☐')+'</span>';
+  r+='<span>'+mid+'</span>';
+  if(isMO){
+    r+='<span>'+(p.owner||'')+'</span>';
+    r+='<span>'+(p.owner2||'')+'</span>';
+    r+='<span>'+(p.bldg||'')+'</span>';
+    r+='<span>'+(p.street||'')+'</span>';
+    r+='<span>'+(p.unit||'')+'</span>';
+    r+='<span>'+(p.site_city||'')+'</span>';
+    r+='<span>'+(p.site_state||'')+'</span>';
+    r+='<span>'+(p.site_zip||'')+'</span>';
+    r+='<span class="ml-wrap">'+(p.occupancy||'')+'</span>';
+    r+='<span>'+(p.notes||'')+'</span>';
+    r+='<span>'+(p.source||'')+'</span>';
+  } else {
+    var sf=(p.site||'')+(p.site_city?', '+p.site_city:'')+(p.site_state?' '+p.site_state:'')+(p.site_zip?' '+p.site_zip:'');
+    r+='<span>'+(p.owner||'')+'</span>';
+    r+='<span>'+(p.owner2||'')+'</span>';
+    r+='<span>'+sf+'</span>';
+    r+='<span class="ml-wrap">'+(p.occupancy||'')+'</span>';
+    r+='<span>'+(p.source||'')+'</span>';
+    r+='<span>'+(p.notes||'')+'</span>';
+  }
+  r+='</div>';
+  return r;}
+
+function setParcelOpacity(val){
+  // 2026-08-22: track the slider's live value so _updateParcel() can restore
+  // it correctly when a parcel/building is un-marked as Worked, instead of
+  // falling back to the DEFAULT_FILL_OPACITY snapshot taken once at page load.
+  _currentFillOpacity=val;
+  document.getElementById('opacity-val').textContent=Math.round(val*100)+'%';
+  // 2026-08-20: the Fill slider faded the parcels and buildings below but never
+  // touched the Legend swatches, so the legend's colors stopped matching what
+  // was on the map as soon as the slider moved. Keep them in step.
+  // 2026-08-22: only .legend-slidable swatches fade -- DNC and Completed stay
+  // solid, matching their always-opaque map behavior (same rule as the
+  // parcel/building loops below, which already exempt DNC/done from fading).
+  document.querySelectorAll('.legend-slidable').forEach(function(sw){sw.style.opacity=val;});
+  Object.keys(_parcelLayers).forEach(function(mid){
+    var lyr=_parcelLayers[mid];
+    // 2026-08-22: DNC parcels stay solid opaque red -- the slider never
+    // fades them, same as it never fades a marked-Worked parcel.
+    if(lyr&&!_isDone(parseInt(mid))&&!_dncSet.has(String(mid))){
+      lyr.setStyle({fillOpacity:val});}});
+  // 2026-07-14: buildings were never wired into the slider at all, so
+  // building footprints stayed opaque no matter what the slider showed.
+  // 2026-07-24: that fix applied the slider to EVERY building with no
+  // done-state guard at all (the parcel loop above always had one) -- so
+  // a building already checked off on the mailing list, locked to solid
+  // black by _updateParcel(), got its opacity overwritten right back to
+  // the slider's value on the very next drag, fading out again as the
+  // slider moved left. Buildings use their subid (e.g. "30") as their
+  // _isDone key directly -- same string _toggleDone() already stores it
+  // under -- no parseInt needed here the way the numeric parcel mids need.
+  Object.keys(_buildingLayers).forEach(function(bid){
+    var bld=_buildingLayers[bid];
+    // 2026-08-22: DNC buildings stay solid opaque red -- same slider
+    // exemption as DNC parcels above.
+    if(bld&&!_isDone(bid)&&!_dncBuildingSet.has(String(bid))){
+      bld.setStyle({fillOpacity:val});}});}
+
+function buildTable(){_allRows=tableData.slice();renderTable(_allRows);}
+
+function filterTable(){
+  var q=document.getElementById('search-box').value.toLowerCase();
+  renderTable(_allRows.filter(function(p){
+    var sf=(p.site||'')+(p.site_city||'')+(p.site_state||'')+(p.site_zip||'');
+    return [p.mapid,p.owner,p.owner2,sf,p.notes,p.source].join(' ').toLowerCase().indexOf(q)>=0;}));}
+
+// 2026-07-24: pull the street name (or the full remainder after a rural
+// N/S/E/W route number) off a site-address string, same logic as fill_
+// addresses.py/generate_mailing_list.py's split_site_address() use on the
+// Python side -- used to group Multi_Occupant rows by street the same way
+// the Excel Multi_Occupant sheet's banners do.
+function _streetOf(site){
+  var s=String(site||'').trim();
+  var parts=s.split(/\s+/);
+  if(parts.length && /^\d+$/.test(parts[0])){parts.shift();}
+  else if(parts.length && /^[NSEWnsew]\d+$/.test(parts[0])){parts.shift();}
+  return parts.join(' ');}
+function _bnumOf(site){
+  var s=String(site||'').trim();
+  var parts=s.split(/\s+/);
+  if(!parts.length)return '';
+  if(/^\d+$/.test(parts[0]))return parts[0];
+  if(/^[NSEWnsew]\d+$/.test(parts[0]))return parts[0].toUpperCase();
+  return '';}
+
+// 2026-07-27: replaces the old flat Confident/Needs Research/Do Not Call
+// buckets. Every section (Residential, Multi-Occupant, Institutions) now
+// uses this same banner-per-street layout, matching the Excel mailing
+// list's look (navy section title, blue street banner, green stats line,
+// amber column header) instead of segregating rows by confidence into
+// separate top-level lists. colorByConfidence controls whether individual
+// rows are colored green/yellow/red by status (Residential, Institutions --
+// these have a real mix of confirmed/unconfirmed/DNC rows, same as their
+// Excel sheets) or left with the simple alternating green/white look
+// Multi_Occupant already had (its rows are all "current resident or
+// Melissa lookup" until proven otherwise, same reasoning the Excel side
+// used to skip confidence coloring on that sheet).
+function _confidenceClass(p){
+  if(p.dnc==='YES')return 'ml-dnc';
+  if(p.occupied==='Yes'&&p.confidence==='High'&&p.research!=='Yes')return 'ml-even-g';
+  return 'ml-even-y';}
+
+// 2026-07-27: Multi-Occupant street groups can mean two very different
+// things -- a street of individually-addressed properties (e.g. Apartment
+// 471's Stone Castle Dr, each address its own unit -- Steve's 2026-07-24
+// call was ONE banner per street there, not one per address, since one-
+// per-address was "too busy and non-functional") vs. a street with a
+// handful of REAL apartment buildings that each hold many units (e.g.
+// Apartment_412's 397/407/417 Harrison St, matching the Excel Multi_
+// Occupant sheet's own one-banner-per-building layout). Both cases group
+// by street first; this only decides whether to split that street group
+// further. The test: if any exact site address repeats within the street
+// (multiple unit rows sharing one building's address), it's the real-
+// building case -- split into one banner per site. If every site is
+// unique, it's the individually-addressed case -- leave it as the single
+// combined street banner, unchanged from before. Residential/Institutions
+// are untouched either way.
+function _bannersForStreetGroup(secKey,rows){
+  if(secKey!=='mo')return [{label:null,rows:rows}];
+  var bySite={},order=[];
+  rows.forEach(function(p){
+    var k=String(p.site||'').toUpperCase();
+    if(!(k in bySite)){bySite[k]=[];order.push(k);}
+    bySite[k].push(p);});
+  var hasRepeat=order.some(function(k){return bySite[k].length>1;});
+  if(!hasRepeat)return [{label:null,rows:rows}];
+  return order.map(function(k){return {label:bySite[k][0].site,rows:bySite[k]};});}
+function _renderBannerSection(secKey,title,rows,colorByConfidence){
+  if(!rows.length)return '';
+  var groups={},order=[];
+  rows.forEach(function(p){
+    var key=_streetOf(p.site).toUpperCase();
+    if(!(key in groups)){groups[key]=[];order.push(key);}
+    groups[key].push(p);});
+  order.sort();
+  var h='<div class=ml-hdr style="background:#1A3A6B;position:sticky;top:var(--ml-searchbar-h,56px);z-index:15;">■ '+title+' ('+rows.length+' total)</div>';
+  order.forEach(function(streetKey){
+    var banners=_bannersForStreetGroup(secKey,groups[streetKey]);
+    banners.forEach(function(b){
+    var sortKey=secKey+'|'+streetKey+(b.label?('|'+b.label):'');
+    var grp=_sortRows(b.rows,sortKey,secKey);
+    var first=grp[0];
+    var addrLine=(b.label||_streetOf(first.site))+(first.site_city?', '+first.site_city:'')+(first.site_state?' '+first.site_state:'')+(first.site_zip?' '+first.site_zip:'');
+    h+='<div class=ml-hdr style="background:#2E5496;font-size:13px;">'+addrLine+'</div>';
+    var _ev=first.mo_env||'';
+    if(_ev){
+      var _es=function(x){return String(x).split('&').join('&amp;').split('<').join('&lt;');};
+      var _el=String(_ev).split('|').map(function(x){return _es(x).split('____').join('<u style="background:#FFE066;text-decoration:none;padding:0 3px;font-weight:bold;">&nbsp;___&nbsp;</u>');}).join('<br>');
+      h+='<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:#FFF8DC;padding:10px 14px;border-left:6px solid #E6A100;">'
+        +'<div style="background:#5B3A8E;color:#fff;border-radius:6px;padding:8px 12px;font-size:12px;line-height:1.4;max-width:240px;"><b style="font-size:13px;display:block;">'+_es(first.mo_tag||'')+'</b>'+_es(first.mo_tag2||'')+'</div>'
+        +'<div style="font-size:26px;color:#5B3A8E;">&#10140;</div>'
+        +'<div style="position:relative;background:#fff;border:1px solid #999;box-shadow:2px 3px 6px rgba(0,0,0,.25);padding:34px 74px 22px 60px;font-family:Consolas,monospace;font-size:14px;line-height:1.45;color:#111;white-space:nowrap;">'
+        +'<div style="position:absolute;left:12px;top:8px;font-size:9px;color:#999;font-family:Arial;">(your return address)</div>'
+        +'<div style="position:absolute;right:12px;top:10px;width:40px;height:46px;border:2px dashed #b55;color:#b55;font-size:9px;text-align:center;line-height:46px;font-family:Arial;">STAMP</div>'
+        +_el+'</div>'
+        +'<div style="font-size:12px;color:#7a5a00;max-width:300px;">&#9993; Address every letter in this building <b>exactly like this</b>.<br>Fill in the unit number from the <b>UNIT</b> column below.<br><b>Do not</b> mail to the street address in the rows.</div></div>';}
+    var btype=first.btype||'';
+    var _st=first.mo_stats||'';
+    if(_st){
+      var _sh=String(_st).split('&').join('&amp;').split('<').join('&lt;');
+      var _mk=first.mo_mak||'';
+      if(_mk){var _lk='<a href="'+String(_mk).split('"').join('&quot;')+'" target="_blank" style="color:#fff;text-decoration:underline;">'+_mk+'</a>';
+        _sh=(_sh.indexOf(_mk)>=0)?_sh.split(_mk).join(_lk):(_sh+' &nbsp;'+_lk);}
+      h+='<div class=ml-hdr style="background:#1B5E20;font-size:11px;font-weight:normal;">'+_sh+'</div>';
+    }else{
+    h+='<div class=ml-hdr style="background:#1B5E20;font-size:11px;font-weight:normal;">'+grp.length+' address(es) on file'+(btype?' &nbsp;|&nbsp; Type: '+btype:'')+'</div>';
+    }
+    h+=_colHdr(sortKey,secKey);
+    grp.forEach(function(p,i){
+      var cls=colorByConfidence?_confidenceClass(p):(i%2===0?'ml-even-g':'ml-odd');
+      h+=_row(p,cls,secKey);});});});
+  return h;}
+
+function renderTable(rows){
+  var res=[],mo=[],inst=[];
+  rows.forEach(function(p){
+    if(p.sheet==='Multi_Occupant'){mo.push(p);}
+    else if(p.sheet==='Institutions'){inst.push(p);}
+    else{res.push(p);}});
+  var sections=[
+    _renderBannerSection('res','RESIDENTIAL',res,true),
+    _renderBannerSection('mo','MULTI-OCCUPANT ADDRESSES',mo,false),
+    _renderBannerSection('inst','INSTITUTIONS',inst,true)
+  ].filter(function(s){return s;});
+  var h=sections.length?sections.join('<div class=ml-gap></div>'):'<div class=ml-none>No addresses found for this territory.</div>';
+  document.getElementById('table-body').innerHTML=h;}
+
+function showTab(tab){
+  document.getElementById('map').style.display=tab==='map'?'block':'none';
+  document.getElementById('table-view').style.display=tab==='table'?'block':'none';
+  /* 2026-08-14: #btn-bar (MapID search + Fill slider) only applies to the
+     map -- hide it on the Mailing List tab instead of leaving it floating
+     over the table underneath. */
+  document.getElementById('btn-bar').style.display=tab==='map'?'flex':'none';
+  if(tab==='map'){setTimeout(function(){map.invalidateSize();},100);}
+  document.querySelectorAll('.tab-btn').forEach(function(b,i){
+    b.classList.toggle('active',(tab==='map'&&i===0)||(tab==='table'&&i===1));});
+  if(tab==='table'&&!window._tableBuilt){buildTable();window._tableBuilt=true;}
+  /* 2026-08-14: on some phones, inserting the (much wider than the screen)
+     Multi-Occupant table into #table-view for the first time leaves the
+     container scrolled a couple hundred px to the right instead of at its
+     left edge -- MapID/Name columns and the left half of every banner get
+     scrolled out of view. Nothing in this file ever sets scrollLeft, so
+     it looks like the browser doing this on its own while laying out the
+     new wide content; forcing it back to 0 right after the table is built
+     fixes it regardless of the cause. */
+  var tv=document.getElementById('table-view');
+  if(tv)tv.scrollLeft=0;}
+var legend=document.getElementById('legend');var dragging=false,ox=0,oy=0;legend.addEventListener('mousedown',function(e){if(e.target!==legend&&!e.target.closest('h4'))return;dragging=true;ox=e.clientX-legend.getBoundingClientRect().left;oy=e.clientY-legend.getBoundingClientRect().top;legend.style.right='auto';legend.style.bottom='auto';e.preventDefault();});document.addEventListener('mousemove',function(e){if(!dragging)return;legend.style.left=(e.clientX-ox)+'px';legend.style.top=(e.clientY-oy)+'px';});document.addEventListener('mouseup',function(){dragging=false;});(function(){var GUIDE_URL='https://fdlterritories.github.io/Territory-Maps-and-MailLists/how-to-use.html';var panel=document.getElementById('howto-panel');if(!panel)return;var titlebar=document.getElementById('howto-panel-titlebar');var iframe=document.getElementById('howto-iframe');var minBtn=document.getElementById('howto-minimize-btn');var closeBtn=document.getElementById('howto-close-btn');var handle=document.getElementById('howto-resize-handle');var loaded=false, minimized=false, lastHeight=null;function clampPosition(){var rect=panel.getBoundingClientRect();var left=parseFloat(panel.style.left);var top=parseFloat(panel.style.top);if(isNaN(left))left=rect.left;if(isNaN(top))top=rect.top;var maxLeft=window.innerWidth-60;var maxTop=window.innerHeight-40;if(left>maxLeft)left=maxLeft;if(left<-(rect.width-60))left=-(rect.width-60);if(top>maxTop)top=maxTop;if(top<0)top=0;panel.style.left=left+'px';panel.style.top=top+'px';}function defaultRect(){var tb=document.getElementById('tab-bar');var topOffset=(tb?Math.round(tb.getBoundingClientRect().bottom):96)+8;var w=Math.min(420, window.innerWidth-32);var h=Math.min(520, window.innerHeight-topOffset-16);panel.style.width=w+'px';panel.style.height=h+'px';panel.style.left='16px';panel.style.top=topOffset+'px';}window.openHowToPanel=function(){if(!loaded){iframe.src=GUIDE_URL;loaded=true;}if(!panel.classList.contains('open')){defaultRect();}panel.classList.remove('minimized');panel.classList.add('open');minimized=false;minBtn.innerHTML='&#x2212;';minBtn.title='Minimize';clampPosition();};closeBtn.addEventListener('click',function(){panel.classList.remove('open');});minBtn.addEventListener('click',function(){minimized=!minimized;if(minimized){lastHeight=panel.style.height;panel.classList.add('minimized');minBtn.innerHTML='&#x2795;';minBtn.title='Restore';}else{panel.classList.remove('minimized');if(lastHeight)panel.style.height=lastHeight;minBtn.innerHTML='&#x2212;';minBtn.title='Minimize';}});var dragging=false,dx=0,dy=0;titlebar.addEventListener('pointerdown',function(e){if(e.target.closest('.howto-panel-btn'))return;dragging=true;var rect=panel.getBoundingClientRect();dx=e.clientX-rect.left;dy=e.clientY-rect.top;panel.style.right='auto';panel.style.bottom='auto';titlebar.setPointerCapture(e.pointerId);e.preventDefault();});titlebar.addEventListener('pointermove',function(e){if(!dragging)return;panel.style.left=(e.clientX-dx)+'px';panel.style.top=(e.clientY-dy)+'px';});function endDrag(){dragging=false;}titlebar.addEventListener('pointerup',endDrag);titlebar.addEventListener('pointercancel',endDrag);var resizing=false,rsx=0,rsy=0,rsw=0,rsh=0;handle.addEventListener('pointerdown',function(e){resizing=true;rsx=e.clientX;rsy=e.clientY;var rect=panel.getBoundingClientRect();rsw=rect.width;rsh=rect.height;handle.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();});handle.addEventListener('pointermove',function(e){if(!resizing)return;var newW=Math.max(280, rsw+(e.clientX-rsx));var newH=Math.max(200, rsh+(e.clientY-rsy));newW=Math.min(newW, window.innerWidth-16);newH=Math.min(newH, window.innerHeight-16);panel.style.width=newW+'px';panel.style.height=newH+'px';});function endResize(){resizing=false;}handle.addEventListener('pointerup',endResize);handle.addEventListener('pointercancel',endResize);window.addEventListener('resize',function(){if(panel.classList.contains('open'))clampPosition();});})();function shareTerritory(){var s=encodeURIComponent('Business_9 Territory Map');var b=encodeURIComponent('Hello,\n\nHere is the link for the Business_9 territory:\n\nhttps://fdlterritories.github.io/Territory-Maps-and-MailLists/Business_9/\n\nThis link opens a page with one button — Open Interactive Map. Once you are in, there are two tabs at the top: Map and Mailing List — tap either one to switch back and forth. If anything is confusing, tap the ❓ How to Use This button at the top of the map page for a full walkthrough.\n\nWorks on any device or browser — no software needed.\n\nThank you!');window.location.href='mailto:?subject='+s+'&body='+b;}function searchMapID(val){var clearBtn=document.getElementById('mapid-search-clear');if(!val){clearBtn.style.display='none';return;}clearBtn.style.display='inline';var target=String(val).trim().toUpperCase();if(!target)return;var found=null;parcelsData.features.forEach(function(f){if(String(f.properties.mapid).toUpperCase()===target){found=f;}});if(!found && typeof buildingsData!=='undefined' && buildingsData){buildingsData.features.forEach(function(f){var subid=f.properties.subid?String(f.properties.subid).toUpperCase():'';var mapid=(f.properties.mapid!==undefined&&f.properties.mapid!=='')?String(f.properties.mapid).toUpperCase():'';if(subid===target || (!subid && mapid===target)){found=f;}});}if(!found)return;var coords=found.geometry.coordinates;function getCenter(c){var pts=[];function collect(x){if(typeof x[0]==='number')pts.push(x);else x.forEach(collect);}collect(c);var lat=pts.reduce(function(s,p){return s+p[1];},0)/pts.length;var lng=pts.reduce(function(s,p){return s+p[0];},0)/pts.length;return [lat,lng];}var center=getCenter(coords);map.setView(center,17);if(window._mapidHighlight){window._mapidHighlight.remove();}window._mapidHighlight=L.circleMarker(center,{radius:33,color:'#FFD700',weight:4,fill:false,opacity:1}).addTo(map);setTimeout(function(){if(window._mapidHighlight){window._mapidHighlight.remove();window._mapidHighlight=null;}},10000);}function clearMapID(){document.getElementById('mapid-input').value='';document.getElementById('mapid-search-clear').style.display='none';}function _fixLayout(){var tb=document.getElementById('tab-bar');if(!tb)return;var offset=Math.round(tb.getBoundingClientRect().bottom);var mapEl=document.getElementById('map');if(mapEl)mapEl.style.height='calc(100vh - '+offset+'px)';var tv=document.getElementById('table-view');if(tv)tv.style.height='calc(100vh - '+offset+'px)';var bb=document.getElementById('btn-bar');if(bb)bb.style.top=offset+'px';var sb=document.getElementById('ml-searchbar');if(sb)document.documentElement.style.setProperty('--ml-searchbar-h',Math.round(sb.getBoundingClientRect().height)+'px');}window.addEventListener('load',_fixLayout);window.addEventListener('resize',_fixLayout);_fixLayout();function _swapToBackupBasemap(){if(_swappedToBackup||!_backupLayer)return;_swappedToBackup=true;map.removeLayer(_primaryLayer);_backupLayer.addTo(map);var existing=document.getElementById('_backupNote');if(existing)existing.remove();var note=document.createElement('div');note.id='_backupNote';note.textContent='Using '+_backupName+' map';note.style.cssText='position:absolute;bottom:6px;left:6px;background:rgba(255,255,255,0.85);padding:2px 7px;font-size:11px;color:#555;border-radius:3px;z-index:1000;pointer-events:none;';document.getElementById('map').appendChild(note);var btn=document.getElementById('basemap-toggle-btn');if(btn)btn.innerHTML='&#x1F5FA; Use '+_primaryName;}function _swapToPrimaryBasemap(){if(!_swappedToBackup)return;_swappedToBackup=false;_primaryFailCount=0;map.removeLayer(_backupLayer);_primaryLayer.addTo(map);var note=document.getElementById('_backupNote');if(note)note.remove();var btn=document.getElementById('basemap-toggle-btn');if(btn)btn.innerHTML='&#x1F5FA; Use '+_backupName;}function toggleBasemap(){if(_swappedToBackup){_swapToPrimaryBasemap();}else{_swapToBackupBasemap();}}
+// 2026-10-27 (v5.24): map <-> mailing-list checkbox link (Steve, A-464/466/468).
+// (1) Mobile-home-park lots: a trailer footprint is keyed by its lot number
+//     ("43") but its mailing-list row is "871-43" -- register the row's
+//     name for that footprint too, so checking the row blackens the trailer.
+// (2) A building whose units each have their own row (200-1, 200-2 ...):
+//     its map popup shows Worked only when every unit row is checked, and
+//     Mark as Worked / undo on the map checks / clears all its unit rows.
+(function(){try{
+if(typeof _buildingLayers==='undefined'||typeof tableData==='undefined')return;
+var _alias={};
+Object.keys(_buildingLayers).forEach(function(k){
+  var L=_buildingLayers[k];var site=(L&&L.feature&&L.feature.properties&&L.feature.properties.site)||'';
+  var m=String(site).match(/^\s*(\S+)\s[^#,]*#\s*([^,\s]+)/);
+  if(m){var a=m[1]+'-'+m[2];if(!_buildingLayers[a]){_buildingLayers[a]=L;}_alias[String(k)]=a;}});
+function _kids(key){key=String(key);return tableData.filter(function(r){
+  return r.parent_mapid&&String(r.parent_mapid)===key&&String(r.mapid)!==key;}).map(function(r){return String(r.mapid);});}
+var _origIsDone=_isDone;
+_isDone=function(mid){var k=String(mid);
+  if(_alias[k])return _origIsDone(_alias[k]);
+  var c=_kids(k);if(c.length)return c.every(function(x){return _origIsDone(x);});
+  return _origIsDone(mid);};
+// v5.25: a building with unit rows is black only when ALL its units are
+// checked -- whatever an old saved/shared state for the building's own key
+// says (that stale key is what kept A-468's 240 black). Un-marking restores
+// the slider's see-through fill instead of leaving a solid grey shape.
+var _origUpd=_updateParcel;
+_updateParcel=function(mid,done){var k=String(mid);
+  var c=_kids(k);if(c.length)done=c.every(function(x){return _origIsDone(x);});
+  _origUpd(mid,done);
+  var b=_buildingLayers[k];
+  if(b&&!done&&!(typeof _dncBuildingSet!=='undefined'&&_dncBuildingSet.has(k))){
+    b.setStyle({fillOpacity:(typeof _currentFillOpacity==='number'?_currentFillOpacity:0.3),
+      color:(b._origStyle&&b._origStyle.color)||'#000000',weight:(b._origStyle&&b._origStyle.weight)||1.5});}
+  // v5.26: a popup left open while units are checked in the list redraws
+  // its Mark as Worked box instead of showing the old state.
+  try{var pp=(typeof map!=='undefined')&&map._popup;if(pp&&map.hasLayer(pp))pp.update();}catch(e){}};
+_toggleDoneFromPopup=function(key){var k=String(key);
+  if(_alias[k]){_toggleDone(_alias[k]);}
+  else{var c=_kids(k);
+    if(c.length){var want=!c.every(function(x){return _origIsDone(x);});
+      c.forEach(function(x){if(_origIsDone(x)!==want)_toggleDone(x);});
+      if(_origIsDone(k)!==want){_setDone(k,want);if(typeof _fbPush==='function')_fbPush(k,want);}
+      _updateParcel(k,want);}
+    else{_toggleDone(key);}}
+  if(typeof map!=='undefined'&&map.closePopup)map.closePopup();};
+}catch(e){if(window.console)console.warn('checkbox link:',e);}})();
+// 2026-10-30 (v5.28): Clear All Worked Marks (Steve: an old test
+// checkmark came back on a rerun from the shared progress store).
+// Clears this territory's marks on this device AND in the shared
+// store, so every device sees them cleared. Asks first.
+function _clearAllWorked(){
+  if(!window.confirm('Clear ALL worked checkmarks for '+_TERRITORY+'?\n\nThis clears them on every device that has this map open. It cannot be undone.'))return;
+  try{
+    var keys=[];
+    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);
+      if(k&&k.indexOf('done_'+_TERRITORY+'_')===0)keys.push(k);}
+    keys.forEach(function(k){
+      var mid=k.substring(('done_'+_TERRITORY+'_').length);
+      localStorage.removeItem(k);
+      try{_updateParcel(mid,false);_updateTableRow(mid,false);}catch(e){}});
+    if(typeof tableData!=='undefined')tableData.forEach(function(p){
+      try{_updateParcel(p.mapid,false);_updateTableRow(p.mapid,false);
+        if(p.parent_mapid)_updateParcel(p.parent_mapid,false);}catch(e){}});
+    // v5.30: clear the shared (Firebase) marks one at a time -- the same
+    // way unchecking a single box does. Erasing the whole territory at
+    // once was refused and the old marks came straight back (A-473).
+    if(typeof _fbTerRef!=='undefined'&&_fbTerRef){try{
+      var _ids={},_pre='done_'+_TERRITORY+'_';
+      keys.forEach(function(k){_ids[k.substring(_pre.length)]=1;});
+      if(typeof tableData!=='undefined')tableData.forEach(function(p){
+        if(p.mapid!=null)_ids[String(p.mapid)]=1;
+        if(p.parent_mapid!=null&&p.parent_mapid!=='')_ids[String(p.parent_mapid)]=1;});
+      Object.keys(_ids).forEach(function(m){try{_fbTerRef.child(m).set(false);}catch(e){}});
+      _fbTerRef.once('value',function(snap){var v=snap.val()||{};
+        Object.keys(v).forEach(function(m){if(v[m]){try{_fbTerRef.child(m).set(false);}catch(e){}}});});
+    }catch(e){}}
+    if(typeof map!=='undefined'&&map.closePopup)map.closePopup();
+  }catch(e){if(window.console)console.warn('clear worked:',e);}}
+(function(){try{
+  var btns=document.querySelectorAll('button');
+  for(var i=0;i<btns.length;i++){
+    if((btns[i].getAttribute('onclick')||'').indexOf('shareProgress')===0){
+      var b=document.createElement('button');
+      b.id='clear-worked-btn';
+      b.innerHTML='&#x1F5D1; Clear All Worked Marks';
+      b.style.cssText=btns[i].style.cssText+';margin-left:8px;color:#8B0000;border-color:#d9a0a0;';
+      b.onclick=_clearAllWorked;
+      btns[i].parentNode.insertBefore(b,btns[i].nextSibling);
+      break;}}
+}catch(e){}})();
+
+// 2026-10-31 (v5.29): Print Map -- prints exactly what is on screen
+// (Steve). Freezes the page at its current on-screen size, scales it to
+// fit one Letter page (landscape when the window is wide, portrait when
+// tall), and turns off the old print rules that rearranged the map.
+function tmPrintMap(){
+  var W=document.documentElement.clientWidth, H=window.innerHeight;
+  var land=W>=H;
+  var pw=(land?11:8.5)-0.5, ph=(land?8.5:11)-0.5;
+  var s=Math.min(pw*96/W, ph*96/H);
+  var removed=[];
+  for(var i=0;i<document.styleSheets.length;i++){
+    var sh=document.styleSheets[i], rs;
+    try{ rs=sh.cssRules; }catch(e){ continue; }
+    for(var j=rs.length-1;j>=0;j--){
+      var r=rs[j];
+      if(r.type===4 && /print/i.test(r.media.mediaText)){
+        removed.push([sh,r.cssText,j]); sh.deleteRule(j);
+      }
+    }
+  }
+  var m=document.getElementById('map');
+  var oldW=m.style.width, oldH=m.style.height;
+  m.style.width=m.offsetWidth+'px'; m.style.height=m.offsetHeight+'px';
+  var st=document.createElement('style'); st.id='tm-print-style';
+  st.textContent='@page{size:letter '+(land?'landscape':'portrait')+';margin:0.25in}'+
+    '@media print{html{zoom:'+s+'}'+
+    'html,body{width:'+W+'px!important;height:'+H+'px!important;overflow:hidden!important;margin:0!important}'+
+    'body{position:relative!important}'+
+    '*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}'+
+    '#tm-print-ctrl{visibility:hidden!important}}';
+  document.head.appendChild(st);
+  var done=false;
+  function restore(){
+    if(done) return; done=true;
+    st.remove(); m.style.width=oldW; m.style.height=oldH;
+    for(var k=removed.length-1;k>=0;k--){
+      try{ removed[k][0].insertRule(removed[k][1],removed[k][2]); }catch(e){}
+    }
+  }
+  window.addEventListener('afterprint',restore,{once:true});
+  setTimeout(function(){ window.print(); setTimeout(restore,1000); },100);
+}
+(function(){
+  var bar=document.getElementById('btn-bar');
+  if(!bar || document.getElementById('tm-print-ctrl')) return;
+  var d=document.createElement('div'); d.id='tm-print-ctrl';
+  d.style.cssText='display:flex;align-items:center;background:rgba(255,255,255,0.97);border:1px solid #ccc;border-radius:8px;padding:6px 12px;box-shadow:0 2px 8px rgba(0,0,0,0.15);';
+  d.innerHTML='<button onclick="tmPrintMap()" title="Print exactly what you see on the map" style="border:none;background:transparent;cursor:pointer;font-size:12px;color:#666;font-weight:bold;white-space:nowrap;">&#x1F5A8; Print Map</button>';
+  bar.appendChild(d);
+})();
+
+// 2026-11-18 (v5.35): street names are back to the map's own (Steve: drawn
+// labels couldn't follow curves). The background map is shown with a little
+// more contrast so its street names read darker under the parcel colors,
+// and the Fill slider stops at 70% so the colors never fully hide it.
+(function(){try{
+  var sl=document.getElementById('opacity-slider');
+  if(sl){sl.max='70'; if(+sl.value>70){sl.value=70;}}
+  // contrast change tried and removed 2026-11-18 (it washed the map out)
+}catch(e){if(window.console)console.warn('basemap contrast:',e);}})();
+
+// 2026-11-18 (v5.36): outbuilding icon (Steve, A-409 garages). A building
+// with no address of its own (marked "secondary": a garage / shed that only
+// borrowed the address of the main building beside it) shows a small garage
+// icon instead of the borrowed house number. Hidden when zoomed out.
+(function(){try{
+  if(typeof map==='undefined'||typeof buildingsData==='undefined'||!buildingsData||!buildingsData.features)return;
+  var st=document.createElement('style');
+  st.textContent='.mapid-label.mapid-label-sm{display:none!important}';
+  document.head.appendChild(st);
+  var svg='<svg width="20" height="17" viewBox="0 0 26 22" style="display:block"><path d="M2 10 L13 2 L24 10 V20 H2 Z" fill="#fff" stroke="#444" stroke-width="2"/><rect x="7" y="11" width="12" height="9" fill="#ddd" stroke="#444" stroke-width="1.5"/><line x1="7" y1="14" x2="19" y2="14" stroke="#444"/><line x1="7" y1="17" x2="19" y2="17" stroke="#444"/></svg>';
+  var grp=L.layerGroup(), n=0;
+  buildingsData.features.forEach(function(f){
+    var p=(f&&f.properties)||{};
+    if(!(p.secondary===true||p.secondary==='True'||p.secondary==='true'))return;
+    var ll=(typeof p.label_lat==='number'&&typeof p.label_lon==='number')
+      ? [p.label_lat,p.label_lon] : L.geoJSON(f).getBounds().getCenter();
+    L.marker(ll,{interactive:false,keyboard:false,
+      icon:L.divIcon({className:'',iconSize:[0,0],iconAnchor:[0,0],
+        html:'<div style="position:absolute;transform:translate(-50%,-50%);pointer-events:none;">'+svg+'</div>'})}).addTo(grp);
+    n++;
+  });
+  if(!n)return;
+  function upd(){var on=map.getZoom()>=16;
+    if(on&&!map.hasLayer(grp))grp.addTo(map); else if(!on&&map.hasLayer(grp))map.removeLayer(grp);}
+  map.on('zoomend',upd); upd();
+}catch(e){if(window.console)console.warn('outbuilding icons:',e);}})();
+</script><script>function _legendResizeSetup(lid,gid){var el=document.getElementById(lid),grip=document.getElementById(gid);if(!el||!grip)return;var sx,sy,sfs,_on=false;grip.addEventListener('mousedown',function(e){e.preventDefault();e.stopPropagation();_on=true;sx=e.clientX;sy=e.clientY;sfs=parseFloat(window.getComputedStyle(el).fontSize)||17;document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);});function mv(e){if(!_on)return;var d=Math.max(e.clientX-sx,e.clientY-sy);el.style.fontSize=Math.max(10,Math.min(30,sfs+d*0.05))+'px';}function up(){_on=false;document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);}}_legendResizeSetup('legend','legend-resizer');_legendResizeSetup('research-legend','research-legend-resizer');</script></body>
+</html>
